@@ -1,0 +1,48 @@
+# Ambiente
+.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dados sensíveis (NUNCA commitar)
+fixtures/real_*/
+fixtures/private_*/
+*.db
+*.sqlite
+*.sqlite3
+
+# Vaults de obra (dados reais, nunca no repo)
+rdo_vaults/
+CODESC_*/
+
+# Logs
+logs/
+*.log
+
+# Outputs temporários
+scratch/
+tmp/

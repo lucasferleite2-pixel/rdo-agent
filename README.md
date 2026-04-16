@@ -1,0 +1,121 @@
+# rdo-agent
+
+**Agente Forense de RDO — Sistema multi-agente para geração de Relatórios Diários de Obra a partir de exportações do WhatsApp, com cadeia de custódia auditável.**
+
+Desenvolvido para Construtora e Imobiliária Vale Nobre Ltda. — contratos SEE-MG / SRE Manhuaçu.
+
+---
+
+## Visão Geral
+
+Converte exportações de conversas do WhatsApp (incluindo mídias anexas) em RDOs tecnicamente consistentes, cronologicamente auditáveis e juridicamente defensáveis.
+
+**Arquitetura:**
+- **Camada 1 (local, Python):** ingestão, hashing SHA-256, parser do .txt, resolução temporal, extração de áudio de vídeo, orquestrador
+- **Camada 2 (OpenAI API):** Whisper para transcrição, GPT-4 Vision para análise de imagens
+- **Camada 3 (Anthropic API):** Claude como agente-engenheiro para síntese do RDO
+
+**Documentação completa:** ver `docs/Blueprint_V3.docx` (especificação de referência)
+
+---
+
+## Stack
+
+- Python 3.11+
+- ffmpeg, exiftool (sistema)
+- SQLite (nativo)
+- OpenAI API (Whisper + GPT-4 Vision)
+- Anthropic API (Claude)
+- Obsidian (visualização da base) + Git (versionamento)
+
+---
+
+## Setup inicial (WSL2 Ubuntu 22.04)
+
+```bash
+# 1. Dependências de sistema
+sudo apt update
+sudo apt install -y ffmpeg exiftool python3.11 python3.11-venv python3-pip git
+
+# 2. Clonar e entrar no projeto
+git clone git@github.com:lucasferleite2-pixel/rdo-agent.git
+cd rdo-agent
+
+# 3. Ambiente virtual
+python3.11 -m venv .venv
+source .venv/bin/activate
+
+# 4. Dependências Python
+pip install -e ".[dev]"
+
+# 5. Configurar variáveis de ambiente
+cp .env.example .env
+# Editar .env e adicionar OPENAI_API_KEY e ANTHROPIC_API_KEY
+
+# 6. Verificar instalação
+rdo-agent --version
+pytest
+```
+
+---
+
+## Uso básico (MVP)
+
+```bash
+# Processar um zip do WhatsApp
+rdo-agent ingest path/to/WhatsApp.zip --obra CODESC_75817
+
+# Ver status do processamento
+rdo-agent status --obra CODESC_75817
+
+# Gerar RDO de um dia específico
+rdo-agent generate-rdo --obra CODESC_75817 --data 2026-03-12
+```
+
+---
+
+## Estrutura do código
+
+```
+src/rdo_agent/
+├── ingestor/          # Camada 1: ingestão + hashing + evidence manifest
+├── parser/            # Camada 1: parser do .txt do WhatsApp
+├── temporal/          # Camada 1: resolução de timestamps (hierarquia de 4 fontes)
+├── extractor/         # Camada 1: extração de áudio de vídeo + grafo de derivação
+├── orchestrator/      # Camada 1: fila de tarefas e coordenação
+└── utils/             # logging, config, db helpers
+```
+
+Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrão blackboard).
+
+---
+
+## Roadmap
+
+- **Sprint 1** (atual) — Camada 1 completa
+- Sprint 2 — Integração OpenAI (Whisper + Vision)
+- Sprint 3 — Base de conhecimento (Obsidian + SQLite) + classificador
+- Sprint 4 — Agente-Engenheiro (Claude API) + geração RDO
+- Sprint 5 — Piloto em obra real
+
+---
+
+## Princípios de desenvolvimento
+
+1. **Integridade primeiro.** Todo arquivo é hasheado antes de ser processado.
+2. **Determinismo onde importa.** A Camada 1 é 100% determinística; LLMs ficam nas Camadas 2-3.
+3. **Rastreabilidade total.** Todo evento registra suas fontes, os agentes que o tocaram e os hashes.
+4. **Comunicação por base.** Agentes nunca chamam outros agentes diretamente; sempre via SQLite.
+5. **Reprodutibilidade.** Mesmo zip de entrada + mesma versão do código = mesmo output local.
+
+---
+
+## Licença
+
+Proprietário. Uso exclusivo da Construtora e Imobiliária Vale Nobre Ltda.
+
+---
+
+## Contato
+
+Lucas Ferreira Leite — lucasferleite2-pixel (GitHub)
