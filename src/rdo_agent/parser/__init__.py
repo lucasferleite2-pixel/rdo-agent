@@ -75,6 +75,19 @@ DELETED_MARKERS = frozenset({
     "Você apagou esta mensagem",
 })
 
+# Left-to-Right Mark — iOS prefixa mensagens de sistema (chamadas, avisos
+# de criptografia) e referências a mídia com este caractere invisível.
+LRM = "\u200e"
+
+IOS_SYSTEM_PREFIXES = (
+    "Ligação de voz",
+    "Ligação de vídeo",
+    "Videochamada",
+    "As mensagens e ligações são protegidas",
+    "As mensagens e as chamadas são protegidas",
+    "Chamada perdida",
+)
+
 DASH_HEADER_RE = re.compile(
     r"^(\d{1,2}/\d{1,2}/\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*-\s*(?:([^:]+):\s*)?(.*)$"
 )
@@ -148,12 +161,21 @@ def parse_chat_file(txt_path: Path) -> list[ParsedMessage]:
 
 
 def _read_text(txt_path: Path) -> str:
-    """Lê o arquivo tentando utf-8; fallback para latin-1 em exports antigos."""
+    """
+    Lê o arquivo tentando utf-8; fallback para latin-1 em exports antigos.
+
+    Remove U+200E (Left-to-Right Mark) de todo o texto. LRM é caractere
+    de apresentação usado pelo iOS WhatsApp para demarcar mensagens
+    especiais (anexos, chamadas, avisos de sistema). Não tem valor
+    semântico ou probatório — removê-lo na leitura evita falhas sutis
+    em string matches downstream (classificação, filtros, comparação).
+    """
     try:
-        return txt_path.read_text(encoding="utf-8")
+        text = txt_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         log.warning("utf-8 falhou em %s; usando latin-1", txt_path)
-        return txt_path.read_text(encoding="latin-1")
+        text = txt_path.read_text(encoding="latin-1")
+    return text.replace(LRM, "")
 
 
 def _detect_format_from_lines(lines: list[str]) -> str | None:
@@ -189,6 +211,17 @@ def _finalize(msg: ParsedMessage) -> None:
     if stripped.endswith(EDITED_MARKER):
         msg.content = stripped[: -len(EDITED_MARKER)].rstrip()
         msg.edited = True
+
+    # 1.5. Mensagem de sistema iOS — o iOS atribui sender a metadados do
+    # sistema (chamadas, criptografia). Detectar pelo prefixo conhecido e
+    # rebatizar como SYSTEM com sender=None. LRM já foi removido no
+    # _read_text (ver docstring), então startswith compara texto limpo.
+    if msg.sender is not None and any(
+        msg.content.startswith(p) for p in IOS_SYSTEM_PREFIXES
+    ):
+        msg.message_type = MessageType.SYSTEM
+        msg.sender = None
+        return
 
     # 2. Sistema = sem remetente
     if msg.sender is None:

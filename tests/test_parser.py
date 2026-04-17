@@ -210,3 +210,42 @@ def test_parse_full_fixture_bracket(bracket_messages: list[ParsedMessage]) -> No
     assert [m.message_type for m in bracket_messages] == [m.message_type for m in dash]
     assert [m.sender for m in bracket_messages] == [m.sender for m in dash]
     assert [m.media_filename for m in bracket_messages] == [m.media_filename for m in dash]
+
+
+# ---------------------------------------------------------------------------
+# Mensagens de sistema iOS (LRM + prefixos conhecidos)
+# ---------------------------------------------------------------------------
+
+
+def test_parses_ios_system_call_voz(tmp_path: Path) -> None:
+    """iOS prefixa chamadas com U+200E e atribui sender — devem virar SYSTEM."""
+    txt = tmp_path / "ios_call.txt"
+    txt.write_text("[04/04/2026, 11:43:22] Lucas: \u200eLigação de voz. \u200e1 minuto\n")
+    msgs = parse_chat_file(txt)
+    assert len(msgs) == 1
+    assert msgs[0].message_type == MessageType.SYSTEM
+    assert msgs[0].sender is None
+    assert "\u200e" not in msgs[0].content
+
+
+def test_parses_ios_system_cripto(tmp_path: Path) -> None:
+    """Aviso de criptografia ponta a ponta com sender atribuído pelo iOS."""
+    txt = tmp_path / "ios_cripto.txt"
+    txt.write_text(
+        "[04/04/2026, 11:43:22] Everaldo: \u200e"
+        "As mensagens e ligações são protegidas com a criptografia de ponta a ponta.\n"
+    )
+    msgs = parse_chat_file(txt)
+    assert len(msgs) == 1
+    assert msgs[0].message_type == MessageType.SYSTEM
+    assert msgs[0].sender is None
+
+
+def test_parses_ios_media_with_lrm_prefix(tmp_path: Path) -> None:
+    """LRM no header e no conteúdo não deve quebrar matching de MEDIA_ANEXADO."""
+    txt = tmp_path / "ios_media.txt"
+    txt.write_text("\u200e[04/04/2026, 15:48:23] Everaldo: \u200e<anexado: X.opus>\n")
+    msgs = parse_chat_file(txt)
+    assert len(msgs) == 1
+    assert msgs[0].message_type == MessageType.MEDIA_REF
+    assert msgs[0].media_filename == "X.opus"
