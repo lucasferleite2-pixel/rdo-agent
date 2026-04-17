@@ -27,10 +27,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import time
+import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
+
+from rdo_agent.utils.logging import get_logger
+
+log = get_logger(__name__)
+
+TaskHandler = Callable[["Task", sqlite3.Connection], "str | None"]
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 DB_FILENAME = "index.sqlite"
@@ -38,7 +47,7 @@ DB_FILENAME = "index.sqlite"
 
 def _now_iso() -> str:
     """ISO 8601 UTC com sufixo Z — usado para created_at/started_at/finished_at."""
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 class TaskStatus(str, Enum):
@@ -239,19 +248,78 @@ def mark_failed(conn: sqlite3.Connection, task_id: int, error: str) -> None:
     conn.commit()
 
 
-def run_worker(vault_path: Path, obra: str, poll_interval_sec: int = 2) -> None:
+def run_worker(
+    vault_path: Path,
+    obra: str,
+    handlers: dict[TaskType, TaskHandler],
+    poll_interval_sec: float = 2.0,
+    stop_when_empty: bool = False,
+) -> None:
     """
     Loop principal do worker.
 
-    Enquanto houver tarefas PENDING com dependências resolvidas:
-        1. Pega a próxima tarefa
-        2. Marca como RUNNING
-        3. Despacha para o handler correspondente ao task_type
-        4. Marca como DONE ou FAILED conforme resultado
-        5. Se FAILED, continua com próxima (não interrompe o loop)
+    A cada iteração:
+        1. Busca próxima PENDING com dependências resolvidas (next_pending).
+        2. Marca como RUNNING.
+        3. Chama handlers[task.task_type](task, conn). O handler é
+           responsável por toda a lógica específica da tarefa; deve
+           retornar uma string (result_ref, ex.: file_id ou event_id) ou
+           None. Se levantar qualquer exceção, task vira FAILED com
+           traceback no error_message e o worker continua.
+        4. Se não houver task_type registrado, marca como FAILED.
+        5. Se a fila estiver vazia, dorme poll_interval_sec.
 
-    Se não houver tarefas pendentes, dorme poll_interval_sec e verifica de novo.
-    Encerra com Ctrl+C.
+    A injeção de handlers via dict (ao invés de registry com decorator
+    ou imports estáticos) é intencional: evita acoplamento estático
+    entre orchestrator e módulos de agente. Um registry com decorator
+    reintroduziria import circular assim que o ingestor/parser/etc.
+    precisassem chamar utilidades do orchestrator.
+
+    Args:
+        vault_path: diretório da vault (init_db será chamado).
+        obra: CODESC da obra — isolamento por obra.
+        handlers: mapa TaskType → função que executa a tarefa. Um
+            handler recebe (task, conn) e retorna result_ref (ou None).
+        poll_interval_sec: tempo dormindo quando a fila está vazia.
+        stop_when_empty: encerra o loop ao encontrar fila vazia em vez
+            de dormir. Primarily for testing — em produção, o worker
+            fica aguardando novas tarefas indefinidamente.
     """
-    # TODO Sprint 1
-    raise NotImplementedError
+    conn = init_db(vault_path)
+    log.info("worker iniciado para obra=%s (stop_when_empty=%s)", obra, stop_when_empty)
+
+    try:
+        while True:
+            task = next_pending(conn, obra)
+            if task is None:
+                if stop_when_empty:
+                    log.info("fila vazia para obra=%s, encerrando (stop_when_empty)", obra)
+                    return
+                time.sleep(poll_interval_sec)
+                continue
+
+            assert task.id is not None
+            mark_running(conn, task.id)
+            log.info("executando task id=%s type=%s", task.id, task.task_type.value)
+
+            handler = handlers.get(task.task_type)
+            if handler is None:
+                msg = f"sem handler registrado para task_type={task.task_type.value}"
+                log.error("task id=%s falhou: %s", task.id, msg)
+                mark_failed(conn, task.id, msg)
+                continue
+
+            try:
+                result_ref = handler(task, conn)
+            except Exception:
+                err = traceback.format_exc()
+                log.exception("task id=%s levantou exceção", task.id)
+                mark_failed(conn, task.id, err)
+                continue
+
+            mark_done(conn, task.id, result_ref=result_ref)
+            log.info("task id=%s concluída result_ref=%s", task.id, result_ref)
+    except KeyboardInterrupt:
+        log.info("worker interrompido (Ctrl+C), encerrando")
+    finally:
+        conn.close()
