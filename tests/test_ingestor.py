@@ -324,3 +324,38 @@ def test_manifest_to_dict_is_json_serializable(
     recovered = json.loads(s)
     assert recovered["zip_sha256"] == manifest.zip_sha256
     assert IngestManifest(**recovered).zip_sha256 == manifest.zip_sha256
+
+
+# ---------------------------------------------------------------------------
+# PDFs e outros documentos — Sprint 1 só classifica; Sprint 2 processa
+# ---------------------------------------------------------------------------
+
+
+def test_pdf_is_classified_as_document(
+    tmp_path: Path,
+    make_synthetic_zip: Callable[..., Path],
+    fake_ots_success: None,
+) -> None:
+    """
+    PDFs devem entrar em files com file_type='document' e
+    semantic_status='awaiting_document_processing'. Sprint 1 NÃO enfileira
+    task — Sprint 2 cria EXTRACT_DOCUMENT (ver SPRINT2_BACKLOG.md).
+    """
+    pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\nxref\n0 1\n%%EOF\n"
+    z = make_synthetic_zip(extra_files={"memorial_descritivo.pdf": pdf_bytes})
+    run_ingest(z, "OBRA_X", tmp_path / "vaults")
+
+    conn = sqlite3.connect(tmp_path / "vaults" / "OBRA_X" / DB_FILENAME)
+    rows = conn.execute(
+        "SELECT file_path, file_type, semantic_status FROM files "
+        "WHERE file_path LIKE '%.pdf'"
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0][1] == "document"
+    assert rows[0][2] == "awaiting_document_processing"
+
+    # Sprint 1: nenhuma task enfileirada para o PDF
+    task_rows = conn.execute(
+        "SELECT payload FROM tasks WHERE payload LIKE '%memorial_descritivo.pdf%'"
+    ).fetchall()
+    assert task_rows == []

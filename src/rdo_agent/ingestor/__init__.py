@@ -82,6 +82,10 @@ EXT_TO_FILE_TYPE: dict[str, str] = {
     ".mp4": "video", ".mov": "video", ".3gp": "video", ".mkv": "video",
     ".opus": "audio", ".m4a": "audio", ".mp3": "audio", ".wav": "audio",
     ".txt": "text",
+    # Documentos (memoriais, cronogramas, ofícios, plantas) — Sprint 2
+    # adiciona handler EXTRACT_DOCUMENT via pdfplumber (ver SPRINT2_BACKLOG.md).
+    ".pdf": "document", ".doc": "document", ".docx": "document",
+    ".xls": "document", ".xlsx": "document", ".odt": "document",
 }
 
 FILE_TYPE_TO_TASK: dict[str, TaskType] = {
@@ -94,6 +98,7 @@ FILE_TYPE_TO_SEMANTIC_STATUS: dict[str, str] = {
     "audio": "awaiting_transcription",
     "video": "awaiting_audio_extraction",
     "image": "awaiting_vision",
+    "document": "awaiting_document_processing",
 }
 
 
