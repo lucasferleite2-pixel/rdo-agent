@@ -16,6 +16,14 @@ FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None
 """Disponibilidade do binário ffmpeg — usado para skipar testes do extractor
 em ambientes onde ffmpeg não está instalado (CI mínimo, container slim)."""
 
+try:
+    import reportlab.pdfgen.canvas  # noqa: F401
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+"""Disponibilidade do reportlab (dev-dep) — usado para gerar PDFs sintéticos
+nos testes do document_extractor sem commitar binários no repo."""
+
 # Tags EXIF — referência: https://exiftool.org/TagNames/EXIF.html
 EXIF_DATETIME = 0x0132          # IFD principal
 EXIF_DATETIME_ORIGINAL = 0x9003  # ExifIFD (tag canônica de captura)
@@ -85,6 +93,51 @@ def make_synthetic_zip(
                 for name, payload in extra_files.items():
                     z.writestr(name, payload)
         return zip_path
+
+    return _make
+
+
+@pytest.fixture
+def make_synthetic_pdf(tmp_path: Path) -> Callable[..., Path]:
+    """
+    Fábrica de PDFs sintéticos via reportlab. Sem commit de binários.
+
+    Modo padrão (scanned=False): cria PDF com texto extraível via
+    canvas.drawString — pdfplumber recupera o texto integralmente.
+
+    Modo scanned=True: cria PDF apenas com formas desenhadas (rect),
+    sem texto. Simula PDF escaneado / página de imagem onde
+    pdfplumber.extract_text() retorna None ou vazio.
+
+    Pré-requisito: reportlab disponível (dev-dep). Testes que usam
+    devem decorar com @pytest.mark.skipif(not REPORTLAB_AVAILABLE).
+    """
+    def _make(
+        filename: str = "memorial.pdf",
+        text: str = "Memorial Descritivo da Obra\nLinha 2 do conteúdo.",
+        scanned: bool = False,
+    ) -> Path:
+        if not REPORTLAB_AVAILABLE:
+            raise RuntimeError(
+                "make_synthetic_pdf requer reportlab; decore o teste "
+                "com @pytest.mark.skipif(not REPORTLAB_AVAILABLE)."
+            )
+        from reportlab.pdfgen import canvas
+
+        path = tmp_path / filename
+        c = canvas.Canvas(str(path))
+        if scanned:
+            # Sem texto: apenas um retângulo preenchido. pdfplumber não
+            # consegue extrair nada útil — extract_text() retorna None/"".
+            c.rect(100, 100, 200, 200, fill=1)
+        else:
+            y = 750
+            for line in text.split("\n"):
+                c.drawString(100, y, line)
+                y -= 20
+        c.showPage()
+        c.save()
+        return path
 
     return _make
 

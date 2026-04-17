@@ -32,6 +32,9 @@ dependencies = [
     "openai>=1.12.0",
     "anthropic>=0.18.0",
 
+    # Document extraction (Sprint 2 §Fase 1)
+    "pdfplumber>=0.11",
+
     # Opentimestamps
     "opentimestamps-client>=0.7.0",
 ]
@@ -45,6 +48,8 @@ dev = [
     "ruff>=0.1.9",
     "mypy>=1.8.0",
     "ipython>=8.18.0",
+    # Geração de PDFs sintéticos para fixtures (Sprint 2 §Fase 1)
+    "reportlab>=4.0",
 ]
 
 [project.scripts]
