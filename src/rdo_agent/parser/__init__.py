@@ -4,45 +4,91 @@ Parser do _chat.txt do WhatsApp — Camada 1.
 Converte o arquivo .txt exportado do WhatsApp em uma lista de mensagens
 estruturadas, identificando remetente, timestamp, conteúdo e referências a mídias.
 
-Desafios conhecidos:
-- Formatos de data variam (pt-BR pode ser DD/MM/YYYY ou DD/MM/YY)
-- Mensagens podem ter múltiplas linhas (continuam na próxima linha)
-- Anexos seguem padrão "<anexado: NOME.ext>" em pt-BR
-- Mensagens apagadas: "Esta mensagem foi apagada"
-- Figurinhas: "<Figurinha omitida>"
-- Mensagens editadas: texto com "<Esta mensagem foi editada>"
-- Respostas citadas vêm em formato específico
+Função pura: Path → list[ParsedMessage]. Sem efeito colateral além de log.
+Resolução de timezone NÃO é feita aqui — é trabalho do módulo `temporal`.
+
+Suporta os dois formatos de export pt-BR:
+  - "dash"    (Android): "12/03/2026 09:45 - Nome: conteúdo"
+  - "bracket" (iOS):     "[12/03/2026, 09:45:32] Nome: conteúdo"
+
+Detecção é feita uma única vez pela primeira linha de dados; o resto do
+arquivo usa o regex correspondente. Premissa: WhatsApp não mistura formatos
+no mesmo export.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
+from dateutil.parser import parse as dateutil_parse
+
+from rdo_agent.utils.logging import get_logger
+
+log = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Enums e dataclass
+# ---------------------------------------------------------------------------
+
 
 class MessageType(str, Enum):
     TEXT = "text"
-    MEDIA_REF = "media_ref"  # mensagem referencia uma mídia anexada
+    MEDIA_REF = "media_ref"
     DELETED = "deleted"
     STICKER = "sticker"
-    SYSTEM = "system"  # "Fulano saiu", "Criptografia fim-a-fim", etc.
+    SYSTEM = "system"
 
 
 @dataclass
 class ParsedMessage:
-    """Uma mensagem parseada do .txt."""
+    """
+    Uma mensagem parseada do .txt.
 
-    line_number: int  # linha no .txt original (para auditoria)
-    timestamp_raw: str  # string original do .txt, sem conversão
-    timestamp: datetime  # parseada para datetime com timezone
+    timestamp é naive (sem tzinfo). A resolução de timezone é responsabilidade
+    do módulo `temporal`, que cruza esta fonte com filename / EXIF / mtime.
+    """
+
+    line_number: int
+    timestamp_raw: str
+    timestamp: datetime
     sender: str | None  # None para mensagens de sistema
     content: str
     message_type: MessageType
-    media_filename: str | None = None  # se MEDIA_REF, o nome do arquivo anexado
+    media_filename: str | None = None
     edited: bool = False
-    flags: list[str] = field(default_factory=list)  # anotações adicionais
+    flags: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Constantes — markers e regex compiladas
+# ---------------------------------------------------------------------------
+
+EDITED_MARKER = "<Esta mensagem foi editada>"
+STICKER_MARKER = "<Figurinha omitida>"
+DELETED_MARKERS = frozenset({
+    "Esta mensagem foi apagada",
+    "Você apagou esta mensagem",
+})
+
+DASH_HEADER_RE = re.compile(
+    r"^(\d{1,2}/\d{1,2}/\d{2,4})\s+(\d{1,2}:\d{2}(?::\d{2})?)\s*-\s*(?:([^:]+):\s*)?(.*)$"
+)
+BRACKET_HEADER_RE = re.compile(
+    r"^\[(\d{1,2}/\d{1,2}/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(?:([^:]+):\s*)?(.*)$"
+)
+
+MEDIA_ANEXADO_RE = re.compile(r"^<anexado:\s*(.+?)>$")
+MEDIA_ARQUIVO_ANEXADO_RE = re.compile(r"^(.+?\.\w+)\s+\(arquivo anexado\)$")
+
+
+# ---------------------------------------------------------------------------
+# API pública
+# ---------------------------------------------------------------------------
 
 
 def parse_chat_file(txt_path: Path) -> list[ParsedMessage]:
@@ -53,36 +99,125 @@ def parse_chat_file(txt_path: Path) -> list[ParsedMessage]:
         txt_path: caminho do arquivo .txt
 
     Returns:
-        Lista de ParsedMessage em ordem de leitura (cronológica no arquivo)
+        Lista de ParsedMessage em ordem de leitura.
 
     Raises:
-        FileNotFoundError: se o arquivo não existir
-        UnicodeDecodeError: se não conseguir decodificar (tentar utf-8 e latin-1)
-
-    Implementação sugerida:
-        1. Ler arquivo com encoding utf-8 (fallback latin-1)
-        2. Iterar linhas acumulando multi-linhas em buffer
-        3. Regex para identificar início de nova mensagem (começa com data)
-        4. Extrair timestamp, sender, conteúdo
-        5. Identificar tipo (mídia, apagada, figurinha, sistema)
-        6. Se mídia: extrair filename do padrão "<anexado: ...>"
+        FileNotFoundError: se o arquivo não existir.
+        ValueError: se a primeira linha de dados não casar com nenhum formato conhecido.
     """
-    # TODO Sprint 1
-    raise NotImplementedError
+    text = _read_text(txt_path)
+    lines = text.splitlines()
+
+    fmt = _detect_format_from_lines(lines)
+    if fmt is None:
+        return []
+    header_re = DASH_HEADER_RE if fmt == "dash" else BRACKET_HEADER_RE
+
+    messages: list[ParsedMessage] = []
+    current: ParsedMessage | None = None
+
+    for i, line in enumerate(lines, start=1):
+        m = header_re.match(line)
+        if m:
+            if current is not None:
+                _finalize(current)
+                messages.append(current)
+            date_str, time_str, sender, content = m.group(1), m.group(2), m.group(3), m.group(4)
+            current = ParsedMessage(
+                line_number=i,
+                timestamp_raw=f"{date_str} {time_str}",
+                timestamp=_parse_timestamp(date_str, time_str),
+                sender=sender.strip() if sender else None,
+                content=content,
+                message_type=MessageType.TEXT,
+            )
+        elif current is not None:
+            current.content += "\n" + line
+        # linha órfã antes da primeira mensagem é ignorada silenciosamente
+
+    if current is not None:
+        _finalize(current)
+        messages.append(current)
+
+    return messages
 
 
-# Padrões regex esperados (documentação para implementação):
-#
-# Início de mensagem pt-BR (exemplos reais):
-#   12/03/2026 09:45 - Nome Sobrenome: conteúdo
-#   12/03/26 9:45 - +55 11 99999-9999: conteúdo
-#   [12/03/2026, 09:45:32] Nome: conteúdo   (variação com colchetes)
-#
-# Mídia anexada:
-#   IMG-20260312-WA0015.jpg (arquivo anexado)
-#   <anexado: VID-20260312-WA0007.mp4>
-#   PTT-20260312-WA0007.opus (arquivo anexado)     (áudio "push-to-talk")
-#
-# Mensagens de sistema (sem remetente):
-#   12/03/2026 09:00 - As mensagens e as chamadas são protegidas...
-#   12/03/2026 09:00 - Fulano entrou usando o link...
+# ---------------------------------------------------------------------------
+# Helpers internos
+# ---------------------------------------------------------------------------
+
+
+def _read_text(txt_path: Path) -> str:
+    """Lê o arquivo tentando utf-8; fallback para latin-1 em exports antigos."""
+    try:
+        return txt_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        log.warning("utf-8 falhou em %s; usando latin-1", txt_path)
+        return txt_path.read_text(encoding="latin-1")
+
+
+def _detect_format_from_lines(lines: list[str]) -> str | None:
+    """
+    Detecta o formato pela primeira linha não-vazia que casa com um header.
+
+    Retorna "dash", "bracket", ou None se o arquivo está vazio.
+    Levanta ValueError se a primeira linha não-vazia não casar com nenhum formato.
+    """
+    for line in lines:
+        if not line.strip():
+            continue
+        if DASH_HEADER_RE.match(line):
+            return "dash"
+        if BRACKET_HEADER_RE.match(line):
+            return "bracket"
+        raise ValueError(f"formato não reconhecido na primeira linha: {line!r}")
+    return None
+
+
+def _parse_timestamp(date_str: str, time_str: str) -> datetime:
+    """pt-BR usa DD/MM, então dayfirst=True. Retorna datetime naive."""
+    return dateutil_parse(f"{date_str} {time_str}", dayfirst=True)
+
+
+def _finalize(msg: ParsedMessage) -> None:
+    """
+    Aplica detecção de tipo e flags após o conteúdo multi-linha estar completo.
+    Mutação in-place: ordem importa (editada primeiro, depois tipo).
+    """
+    # 1. Marker de edição — detectar e remover antes de classificar tipo
+    stripped = msg.content.rstrip()
+    if stripped.endswith(EDITED_MARKER):
+        msg.content = stripped[: -len(EDITED_MARKER)].rstrip()
+        msg.edited = True
+
+    # 2. Sistema = sem remetente
+    if msg.sender is None:
+        msg.message_type = MessageType.SYSTEM
+        return
+
+    # 3. Figurinha
+    if msg.content == STICKER_MARKER:
+        msg.message_type = MessageType.STICKER
+        return
+
+    # 4. Apagada
+    if msg.content in DELETED_MARKERS:
+        msg.message_type = MessageType.DELETED
+        return
+
+    # 5. Mídia formato A: <anexado: NOME.ext>
+    m = MEDIA_ANEXADO_RE.match(msg.content)
+    if m:
+        msg.message_type = MessageType.MEDIA_REF
+        msg.media_filename = m.group(1).strip()
+        return
+
+    # 6. Mídia formato B: NOME.ext (arquivo anexado) — aceita espaços no nome
+    m = MEDIA_ARQUIVO_ANEXADO_RE.match(msg.content)
+    if m:
+        msg.message_type = MessageType.MEDIA_REF
+        msg.media_filename = m.group(1).strip()
+        return
+
+    # Default: TEXT (já é o default no construtor, mas explícito para clareza)
+    msg.message_type = MessageType.TEXT
