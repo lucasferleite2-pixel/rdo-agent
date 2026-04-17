@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
 import zipfile
 from collections.abc import Callable
 from datetime import datetime
@@ -9,6 +11,10 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
+
+FFMPEG_AVAILABLE = shutil.which("ffmpeg") is not None
+"""Disponibilidade do binário ffmpeg — usado para skipar testes do extractor
+em ambientes onde ffmpeg não está instalado (CI mínimo, container slim)."""
 
 # Tags EXIF — referência: https://exiftool.org/TagNames/EXIF.html
 EXIF_DATETIME = 0x0132          # IFD principal
@@ -79,5 +85,42 @@ def make_synthetic_zip(
                 for name, payload in extra_files.items():
                     z.writestr(name, payload)
         return zip_path
+
+    return _make
+
+
+@pytest.fixture
+def make_synthetic_video(tmp_path: Path) -> Callable[..., Path]:
+    """
+    Fábrica de vídeos sintéticos curtos via ffmpeg (testsrc + sine).
+
+    Gera um .mp4 de ~1s com vídeo testsrc 64×64 e áudio senoidal 1kHz —
+    suficiente para validar a extração de áudio sem depender de fixtures
+    binárias commitadas no repositório.
+
+    Pré-requisito: ffmpeg disponível. Testes que usam esta fixture devem
+    decorar com @pytest.mark.skipif(not FFMPEG_AVAILABLE, reason=...).
+    A fixture levanta RuntimeError se ffmpeg estiver ausente, garantindo
+    falha barulhenta caso o skipif seja esquecido.
+    """
+    def _make(filename: str = "VID-20260312-WA0007.mp4", duration: float = 1.0) -> Path:
+        if not FFMPEG_AVAILABLE:
+            raise RuntimeError(
+                "make_synthetic_video requer ffmpeg no PATH; decore o teste "
+                "com @pytest.mark.skipif(not FFMPEG_AVAILABLE)."
+            )
+        out = tmp_path / filename
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", f"testsrc=size=64x64:rate=5:duration={duration}",
+                "-f", "lavfi", "-i", f"sine=frequency=1000:duration={duration}",
+                "-c:v", "mpeg4", "-c:a", "aac", "-shortest",
+                str(out),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return out
 
     return _make
