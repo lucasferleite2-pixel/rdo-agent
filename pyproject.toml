@@ -23,6 +23,7 @@ dependencies = [
 
     # Metadata extraction
     "pymediainfo>=6.1.0",
+    "pillow>=10.0",
 
     # Task scheduling
     "apscheduler>=3.10.0",

@@ -35,7 +35,8 @@ Converte exportações de conversas do WhatsApp (incluindo mídias anexas) em RD
 ```bash
 # 1. Dependências de sistema
 sudo apt update
-sudo apt install -y ffmpeg exiftool python3.11 python3.11-venv python3-pip git
+sudo apt install -y ffmpeg exiftool libmediainfo0v5 python3.11 python3.11-venv python3-pip git
+# libmediainfo0v5: necessário para extração de timestamp de vídeo/áudio via pymediainfo
 
 # 2. Clonar e entrar no projeto
 git clone git@github.com:lucasferleite2-pixel/rdo-agent.git
