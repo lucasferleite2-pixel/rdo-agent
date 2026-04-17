@@ -99,6 +99,15 @@ WHATSAPP_FILENAME_RE = re.compile(
 NATIVE_FILENAME_RE = re.compile(
     r"^(?:IMG|VID)_(\d{8})_(\d{6})\.[A-Za-z0-9]+$"
 )
+# iOS WhatsApp: "00000003-AUDIO-2026-04-04-11-48-41.opus" — timestamp
+# completo até segundo no próprio nome. Mais específico que os outros
+# regexes; deve ser testado primeiro em parse_from_filename.
+WHATSAPP_IOS_RE = re.compile(
+    r"^\d{5,}-(AUDIO|PHOTO|VIDEO)-"
+    r"(\d{4})-(\d{2})-(\d{2})-"
+    r"(\d{2})-(\d{2})-(\d{2})"
+    r"\.[A-Za-z0-9]+$"
+)
 
 # EXIF tags
 _EXIF_DATETIME_ORIGINAL = 0x9003
@@ -169,6 +178,17 @@ def parse_from_filename(filename: str) -> datetime | None:
 
     Retorna None (nunca raise) para nomes não reconhecidos ou datas inválidas.
     """
+    # iOS WhatsApp PRIMEIRO — mais específico, carrega timestamp em segundos.
+    m = WHATSAPP_IOS_RE.match(filename)
+    if m:
+        try:
+            return datetime(
+                int(m.group(2)), int(m.group(3)), int(m.group(4)),
+                int(m.group(5)), int(m.group(6)), int(m.group(7)),
+            )
+        except ValueError:
+            return None
+
     m = WHATSAPP_FILENAME_RE.match(filename)
     if m:
         try:

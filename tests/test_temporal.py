@@ -85,6 +85,29 @@ def test_parse_filename_invalid_date_returns_none() -> None:
     assert parse_from_filename("IMG-20261332-WA0001.jpg") is None
 
 
+def test_parse_filename_whatsapp_ios_audio() -> None:
+    assert parse_from_filename(
+        "00000003-AUDIO-2026-04-04-11-48-41.opus"
+    ) == datetime(2026, 4, 4, 11, 48, 41)
+
+
+def test_parse_filename_whatsapp_ios_photo() -> None:
+    assert parse_from_filename(
+        "00000052-PHOTO-2026-04-06-11-13-24.jpg"
+    ) == datetime(2026, 4, 6, 11, 13, 24)
+
+
+def test_parse_filename_whatsapp_ios_video() -> None:
+    assert parse_from_filename(
+        "00000100-VIDEO-2026-04-10-15-30-00.mp4"
+    ) == datetime(2026, 4, 10, 15, 30, 0)
+
+
+def test_parse_filename_ios_invalid_date_returns_none() -> None:
+    """Mês 13 inválido — retorna None, não levanta."""
+    assert parse_from_filename("00000001-AUDIO-2026-13-40-99-99-99.opus") is None
+
+
 # ---------------------------------------------------------------------------
 # extract_metadata_timestamp
 # ---------------------------------------------------------------------------
