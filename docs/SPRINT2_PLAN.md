@@ -95,7 +95,7 @@ Checklist:
 
 - [ ] Adicionar `pdfplumber>=0.11` ao `pyproject.toml`
 - [ ] Implementar `extract_document_handler(task, conn)` em novo módulo `src/rdo_agent/document_extractor/`
-- [ ] Schema: criar tabela `documents` (ou reusar `transcriptions` com `source_type='document'`)
+- [x] Schema: tabela `documents` dedicada (decisão fechada; ver `schema.sql` linha ~170)
 - [ ] Novo `TaskType.EXTRACT_DOCUMENT` no orchestrator
 - [ ] Ingestor enfileira `EXTRACT_DOCUMENT` quando `file_type == "document"`
 - [ ] Fixtures: PDF digital simples + PDF escaneado (para validar fallback)
