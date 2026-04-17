@@ -17,6 +17,8 @@ import click
 from rich.console import Console
 
 from rdo_agent import __version__
+from rdo_agent.ingestor import IngestConflictError, run_ingest
+from rdo_agent.utils import config
 
 console = Console()
 
@@ -34,11 +36,35 @@ def main() -> None:
 @click.option("--vault-root", type=click.Path(path_type=Path), help="Raiz das vaults (sobrescreve .env)")
 def ingest(zip_path: Path, obra: str, vault_root: Path | None) -> None:
     """Ingere um zip do WhatsApp na vault da obra especificada."""
+    effective_root = vault_root or config.get().vaults_root
     console.print(f"[bold cyan]Ingest:[/bold cyan] {zip_path}")
     console.print(f"[bold cyan]Obra:[/bold cyan]   {obra}")
-    # TODO Sprint 1: chamar rdo_agent.ingestor.run_ingest(zip_path, obra, vault_root)
-    console.print("[yellow]⚠ Implementação pendente (Sprint 1)[/yellow]")
-    sys.exit(0)
+    console.print(f"[bold cyan]Vault:[/bold cyan]  {effective_root / obra}")
+    try:
+        manifest = run_ingest(zip_path, obra, effective_root)
+    except IngestConflictError as e:
+        console.print(f"[red]✗ Conflito de ingest:[/red] {e}")
+        sys.exit(2)
+
+    if manifest.was_already_ingested:
+        console.print(
+            f"[yellow]⚠ Ingest já realizado em {manifest.ingest_timestamp} "
+            f"(zip {manifest.zip_sha256[:12]}…). Nada a fazer.[/yellow]"
+        )
+        return
+
+    console.print(
+        f"[green]✓[/green] Ingest concluído: zip "
+        f"{manifest.zip_sha256[:12]}… | files: {len(manifest.files)} | "
+        f"messages: {manifest.messages_count}"
+    )
+    if manifest.opentimestamps_pending:
+        console.print(
+            "[yellow]⚠ OpenTimestamps pendente — "
+            "stamp não foi obtido (calendar offline?)[/yellow]"
+        )
+    if manifest.git_commit_hash is None:
+        console.print("[yellow]⚠ git commit falhou — vault não versionada[/yellow]")
 
 
 @main.command()
