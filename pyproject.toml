@@ -29,7 +29,7 @@ dependencies = [
     "apscheduler>=3.10.0",
 
     # APIs (para sprints 2+)
-    "openai>=1.12.0",
+    "openai>=1.30",
     "anthropic>=0.18.0",
 
     # Document extraction (Sprint 2 §Fase 1)
