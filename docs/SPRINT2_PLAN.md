@@ -100,6 +100,7 @@ Checklist:
 - [ ] Ingestor enfileira `EXTRACT_DOCUMENT` quando `file_type == "document"`
 - [ ] Fixtures: PDF digital simples + PDF escaneado (para validar fallback)
 - [ ] ~8 testes unitários cobrindo: extração OK, PDF sem texto, PDF corrompido, idempotência
+- [ ] **Sentinel para PDF sem texto extraível** (descoberto no E2E): handler escreve marcador estruturado no `.txt` derivado contendo `source_file_id`, `source_path` e `source_sha256` quando `pdfplumber.extract_text()` retorna vazio. Resolve colisão de `file_id` entre múltiplos PDFs escaneados (sha256 de `""` é constante). Contrato do banco preservado: `documents.text` permanece `""` — sentinel vive apenas em disco para auditoria humana.
 - [ ] Golden fixture capturada se usar biblioteca externa (pdfplumber é local, não precisa)
 - [ ] Smoke: roda contra o PDF real da vault EVERALDO (plantas da escola)
 - [ ] Critério: PDF da vault real é processado, texto extraído, task vira done
