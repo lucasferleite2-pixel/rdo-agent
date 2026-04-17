@@ -30,6 +30,9 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+DB_FILENAME = "index.sqlite"
+
 
 class TaskStatus(str, Enum):
     PENDING = "pending"
@@ -77,14 +80,34 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     """
     Inicializa o index.sqlite da vault se ainda não existir.
 
-    Cria todas as tabelas: tasks, files, messages, media_derivations,
-    transcriptions, visual_analyses, events, clusters, api_calls.
+    Cria (se ausentes) todas as 9 tabelas do Blueprint §7.2 lendo o DDL
+    de schema.sql. Idempotente: chamar sobre uma vault já inicializada
+    não destrói dados.
+
+    Aplica os PRAGMAs necessários:
+      - foreign_keys=ON: FKs declaradas no schema são efetivamente validadas.
+      - journal_mode=WAL: leituras concorrentes não bloqueiam escritas
+        (workers podem ler status enquanto outro processo grava).
+
+    Args:
+        vault_path: diretório da vault da obra (ex.: rdo_vaults/CODESC_75817/).
+            Será criado se não existir. O arquivo SQLite é gravado em
+            vault_path/index.sqlite.
 
     Returns:
-        Conexão SQLite pronta para uso.
+        Conexão SQLite pronta para uso, com PRAGMAs já aplicados.
     """
-    # TODO Sprint 1
-    raise NotImplementedError
+    vault_path.mkdir(parents=True, exist_ok=True)
+    db_path = vault_path / DB_FILENAME
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+
+    conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    conn.commit()
+    return conn
 
 
 def enqueue(conn: sqlite3.Connection, task: Task) -> int:
