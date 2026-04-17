@@ -46,3 +46,4 @@ logs/
 # Outputs temporários
 scratch/
 tmp/
+.env.*
