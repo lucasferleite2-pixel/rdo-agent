@@ -44,6 +44,38 @@ def _now_iso_utc() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
+def _build_empty_sentinel(
+    pdf_file_id: str,
+    pdf_rel_path: str,
+    pdf_sha256: str,
+    page_count: int,
+) -> str:
+    """
+    Marcador textual estruturado para PDFs sem texto extraível.
+
+    Resolve a colisão de file_id que ocorreria com múltiplos PDFs
+    escaneados na mesma vault: sha256 de string vazia é constante
+    (e3b0c44298fc...), o que produziria sempre o mesmo file_id e
+    perderia derivações via INSERT OR IGNORE em files.
+
+    O sentinel inclui o sha256 do PDF-fonte, tornando o conteúdo do .txt
+    derivado único por origem. Bonus: qualquer auditor abrindo o .txt
+    no Obsidian/editor entende imediatamente o que aconteceu.
+
+    Mantém o contrato do banco: documents.text continua sendo "" quando
+    pdfplumber não extraiu nada — o sentinel vive apenas no .txt em disco.
+    """
+    return (
+        "# rdo-agent: sem texto extraível\n"
+        f"# extractor: {EXTRACTION_METHOD}\n"
+        f"# source_file_id: {pdf_file_id}\n"
+        f"# source_path: {pdf_rel_path}\n"
+        f"# source_sha256: {pdf_sha256}\n"
+        f"# pages: {page_count}\n"
+        "# note: PDF provavelmente escaneado ou sem texto digital\n"
+    )
+
+
 def extract_text_from_document(
     doc_path: Path,
     output_path: Path,
@@ -130,7 +162,7 @@ def extract_document_handler(task: Task, conn: sqlite3.Connection) -> str | None
     pdf_path = vault_path / pdf_rel_path
 
     src_row = conn.execute(
-        "SELECT file_id, referenced_by_message, timestamp_resolved, timestamp_source "
+        "SELECT file_id, sha256, referenced_by_message, timestamp_resolved, timestamp_source "
         "FROM files WHERE file_id = ?",
         (pdf_file_id,),
     ).fetchone()
@@ -142,7 +174,22 @@ def extract_document_handler(task: Task, conn: sqlite3.Connection) -> str | None
 
     _, method, page_count = extract_text_from_document(pdf_path, txt_path)
 
+    # Texto canônico (vai para documents.text) — preserva contrato:
+    # vazio quando o PDF é escaneado / sem texto digital.
     text = txt_path.read_text(encoding="utf-8")
+
+    # Em disco, substitui o .txt vazio por sentinel com metadata da origem.
+    # Garante file_id único por derivação (sha256 de "" é constante,
+    # causaria colisão entre múltiplos PDFs escaneados via INSERT OR IGNORE).
+    if not text:
+        sentinel = _build_empty_sentinel(
+            pdf_file_id=pdf_file_id,
+            pdf_rel_path=pdf_rel_path,
+            pdf_sha256=src_row["sha256"],
+            page_count=page_count,
+        )
+        txt_path.write_text(sentinel, encoding="utf-8")
+
     txt_sha = sha256_file(txt_path)
     txt_file_id = f"f_{txt_sha[:12]}"
     txt_rel_path = f"20_transcriptions/{txt_filename}"

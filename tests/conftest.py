@@ -116,6 +116,7 @@ def make_synthetic_pdf(tmp_path: Path) -> Callable[..., Path]:
         filename: str = "memorial.pdf",
         text: str = "Memorial Descritivo da Obra\nLinha 2 do conteúdo.",
         scanned: bool = False,
+        scanned_size: tuple[int, int] = (200, 200),
     ) -> Path:
         if not REPORTLAB_AVAILABLE:
             raise RuntimeError(
@@ -129,7 +130,10 @@ def make_synthetic_pdf(tmp_path: Path) -> Callable[..., Path]:
         if scanned:
             # Sem texto: apenas um retângulo preenchido. pdfplumber não
             # consegue extrair nada útil — extract_text() retorna None/"".
-            c.rect(100, 100, 200, 200, fill=1)
+            # scanned_size permite gerar PDFs visualmente distintos com sha256
+            # diferente sem depender do timestamp interno do reportlab — útil
+            # para o teste de colisão de file_id.
+            c.rect(100, 100, scanned_size[0], scanned_size[1], fill=1)
         else:
             y = 750
             for line in text.split("\n"):

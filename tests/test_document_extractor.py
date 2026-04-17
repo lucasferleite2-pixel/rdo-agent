@@ -337,12 +337,23 @@ def test_handler_accepts_scanned_pdf_with_empty_text(
     # Não levantou — pseudo-DONE; result_ref preenchido.
     assert txt_file_id is not None
 
-    # documents.text deve ser '' (vazio), não None.
+    # documents.text deve ser '' (vazio), não None — contrato do banco
+    # preserva: text é o que pdfplumber extraiu, sentinel fica só em disco.
     doc_row = conn.execute(
         "SELECT text, page_count FROM documents WHERE file_id = ?", (txt_file_id,),
     ).fetchone()
     assert doc_row["text"] == ""
     assert doc_row["page_count"] == 1
+
+    # .txt em disco contém sentinel estruturado com metadata da origem
+    # (resolve colisão de file_id entre múltiplos PDFs escaneados).
+    txt_on_disk = (
+        vault / "20_transcriptions" / f"{pdf_dst.name}.text.txt"
+    ).read_text(encoding="utf-8")
+    assert "sem texto extraível" in txt_on_disk
+    assert "source_file_id" in txt_on_disk
+    assert "source_sha256" in txt_on_disk
+    assert pdf_sha in txt_on_disk
 
     # log.warning chamado com mensagem específica.
     warning_records = [
@@ -350,3 +361,80 @@ def test_handler_accepts_scanned_pdf_with_empty_text(
         if r.levelno == logging.WARNING and "PDF escaneado/sem texto" in r.getMessage()
     ]
     assert len(warning_records) >= 1
+
+
+@requires_reportlab
+def test_handler_handles_two_scanned_pdfs_without_collision(
+    vaults_root: Path,
+    make_synthetic_pdf: Callable[..., Path],
+) -> None:
+    """
+    Dois PDFs escaneados na mesma vault NÃO devem colidir em file_id.
+    Sem o sentinel, ambos os .txt seriam string vazia e sha256 colidiria
+    em e3b0c44298fc..., descartando uma das derivações via INSERT OR IGNORE.
+    O sentinel inclui o sha256 do PDF-fonte, garantindo unicidade.
+    """
+    obra = "OBRA_MULTI"
+    vault = vaults_root / obra
+    media_dir = vault / "10_media"
+    media_dir.mkdir(parents=True)
+
+    conn = init_db(vault)
+    pdf_meta = []
+    # scanned_size diferente garante PDFs com sha256 distinto sem depender
+    # do timestamp interno do reportlab (que pode coincidir em testes rápidos).
+    for name, size in [("planta_a.pdf", (200, 200)), ("planta_b.pdf", (150, 250))]:
+        pdf_src = make_synthetic_pdf(name, scanned=True, scanned_size=size)
+        pdf_dst = media_dir / pdf_src.name
+        pdf_dst.write_bytes(pdf_src.read_bytes())
+        pdf_sha = sha256_file(pdf_dst)
+        pdf_file_id = f"f_{pdf_sha[:12]}"
+        conn.execute(
+            """
+            INSERT INTO files (
+                file_id, obra, file_path, file_type, sha256, size_bytes,
+                timestamp_resolved, timestamp_source,
+                semantic_status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                pdf_file_id, obra, f"10_media/{name}", "document", pdf_sha,
+                pdf_dst.stat().st_size,
+                "2026-04-04T11:43:22+00:00", "filesystem",
+                "awaiting_document_processing", "2026-04-17T00:00:00.000000Z",
+            ),
+        )
+        pdf_meta.append((pdf_file_id, name))
+    conn.commit()
+
+    # Sanidade: os dois PDFs têm sha256 distintos
+    assert pdf_meta[0][0] != pdf_meta[1][0]
+
+    txt_file_ids = []
+    for pdf_file_id, name in pdf_meta:
+        task = Task(
+            id=None,
+            task_type=TaskType.EXTRACT_DOCUMENT,
+            payload={"file_id": pdf_file_id, "file_path": f"10_media/{name}"},
+            status=TaskStatus.PENDING,
+            depends_on=[],
+            obra=obra,
+            created_at="",
+        )
+        txt_file_ids.append(extract_document_handler(task, conn))
+
+    # Critério principal: cada PDF gera um .txt com file_id único.
+    assert len(set(txt_file_ids)) == 2, f"file_ids colidiram: {txt_file_ids}"
+
+    # Banco reflete: 2 rows .txt em files + 2 rows em documents.
+    text_count = conn.execute(
+        "SELECT COUNT(*) FROM files WHERE file_type = 'text'"
+    ).fetchone()[0]
+    assert text_count == 2
+
+    doc_count = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    assert doc_count == 2
+
+    # 2 derivações distintas registradas
+    deriv_count = conn.execute("SELECT COUNT(*) FROM media_derivations").fetchone()[0]
+    assert deriv_count == 2
