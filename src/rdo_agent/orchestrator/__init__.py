@@ -67,6 +67,7 @@ class TaskType(str, Enum):
     # Sprint 2
     TRANSCRIBE = "transcribe"
     VISUAL_ANALYSIS = "visual_analysis"
+    EXTRACT_DOCUMENT = "extract_document"
 
     # Sprint 3
     CLASSIFY = "classify"

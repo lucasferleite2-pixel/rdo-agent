@@ -331,15 +331,15 @@ def test_manifest_to_dict_is_json_serializable(
 # ---------------------------------------------------------------------------
 
 
-def test_pdf_is_classified_as_document(
+def test_pdf_is_classified_as_document_and_enqueues_extract(
     tmp_path: Path,
     make_synthetic_zip: Callable[..., Path],
     fake_ots_success: None,
 ) -> None:
     """
-    PDFs devem entrar em files com file_type='document' e
-    semantic_status='awaiting_document_processing'. Sprint 1 NÃO enfileira
-    task — Sprint 2 cria EXTRACT_DOCUMENT (ver SPRINT2_BACKLOG.md).
+    PDFs entram em files com file_type='document' e
+    semantic_status='awaiting_document_processing'. Sprint 2 §Fase 1 já
+    enfileira EXTRACT_DOCUMENT (handler em rdo_agent.document_extractor).
     """
     pdf_bytes = b"%PDF-1.4\n1 0 obj<<>>endobj\nxref\n0 1\n%%EOF\n"
     z = make_synthetic_zip(extra_files={"memorial_descritivo.pdf": pdf_bytes})
@@ -354,8 +354,11 @@ def test_pdf_is_classified_as_document(
     assert rows[0][1] == "document"
     assert rows[0][2] == "awaiting_document_processing"
 
-    # Sprint 1: nenhuma task enfileirada para o PDF
+    # Sprint 2 §Fase 1: PDF enfileira EXTRACT_DOCUMENT (apenas).
     task_rows = conn.execute(
-        "SELECT payload FROM tasks WHERE payload LIKE '%memorial_descritivo.pdf%'"
+        "SELECT task_type, status FROM tasks "
+        "WHERE payload LIKE '%memorial_descritivo.pdf%'"
     ).fetchall()
-    assert task_rows == []
+    assert len(task_rows) == 1
+    assert task_rows[0][0] == "extract_document"
+    assert task_rows[0][1] == "pending"

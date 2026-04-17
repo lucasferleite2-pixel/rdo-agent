@@ -92,6 +92,7 @@ FILE_TYPE_TO_TASK: dict[str, TaskType] = {
     "audio": TaskType.TRANSCRIBE,
     "video": TaskType.EXTRACT_AUDIO,
     "image": TaskType.VISUAL_ANALYSIS,
+    "document": TaskType.EXTRACT_DOCUMENT,
 }
 
 FILE_TYPE_TO_SEMANTIC_STATUS: dict[str, str] = {

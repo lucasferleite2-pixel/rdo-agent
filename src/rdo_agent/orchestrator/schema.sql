@@ -167,6 +167,41 @@ CREATE INDEX IF NOT EXISTS idx_visual_file ON visual_analyses(file_id);
 
 
 -- ---------------------------------------------------------------------------
+-- documents — texto extraído de PDFs e similares (Sprint 2 §Fase 1)
+--
+-- ADICIONADA EM SPRINT 2: reconhecimento explícito de necessidade não prevista
+-- no Blueprint V3 §7.2 original. NÃO é fragmentação indevida — texto extraído
+-- de PDF é semanticamente distinto de transcrição de áudio: o primeiro é
+-- determinístico (mesmo PDF + mesmo método = mesmo texto), o segundo é
+-- estocástico (depende do modelo Whisper). Manter em tabelas separadas evita
+-- queries que misturam confidence/segments_json (sem sentido para PDF) com
+-- page_count (sem sentido para áudio).
+--
+-- file_id aponta para o .txt DERIVADO (em 20_transcriptions/), NÃO para o
+-- PDF-fonte. Isso simplifica o join do classificador da Sprint 3, que opera
+-- sobre rows de files com semantic_status='awaiting_classification'.
+--
+-- UNIQUE(file_id) garante idempotência: extração via pdfplumber é
+-- determinística, então re-rodar o handler não cria duplicatas.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS documents (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    obra              TEXT NOT NULL,
+    file_id           TEXT NOT NULL,
+    text              TEXT,                              -- pode ser '' (PDF escaneado)
+    page_count        INTEGER,
+    extraction_method TEXT NOT NULL,                     -- ex: "pdfplumber>=0.11"
+    api_call_id       INTEGER,                           -- placeholder p/ OCR futuro
+    created_at        TEXT NOT NULL,
+    FOREIGN KEY (file_id)     REFERENCES files(file_id),
+    FOREIGN KEY (api_call_id) REFERENCES api_calls(id),
+    UNIQUE (file_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_documents_file ON documents(file_id);
+
+
+-- ---------------------------------------------------------------------------
 -- events — unidades classificadas que alimentam o agente-engenheiro
 -- (Blueprint §6.3: payload de entrada do Claude)
 -- ---------------------------------------------------------------------------
