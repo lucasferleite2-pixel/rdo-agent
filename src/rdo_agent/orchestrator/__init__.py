@@ -141,8 +141,27 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = WAL")
 
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    _migrate_api_calls_sprint2_phase2(conn)
     conn.commit()
     return conn
+
+
+def _migrate_api_calls_sprint2_phase2(conn: sqlite3.Connection) -> None:
+    """
+    Sprint 2 §Fase 2 — adiciona latency_ms/model/error_type à tabela api_calls.
+
+    Idempotente: consulta PRAGMA table_info e só aplica ALTER TABLE para
+    colunas ainda ausentes. Necessária para vaults criadas antes desta sprint;
+    vaults frescas já recebem as colunas via CREATE TABLE em schema.sql.
+    """
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(api_calls)")}
+    for col_name, col_def in (
+        ("latency_ms", "INTEGER"),
+        ("model", "TEXT"),
+        ("error_type", "TEXT"),
+    ):
+        if col_name not in existing:
+            conn.execute(f"ALTER TABLE api_calls ADD COLUMN {col_name} {col_def}")
 
 
 def enqueue(conn: sqlite3.Connection, task: Task) -> int:

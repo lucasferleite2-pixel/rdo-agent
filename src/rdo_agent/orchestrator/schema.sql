@@ -104,6 +104,12 @@ CREATE TABLE IF NOT EXISTS media_derivations (
 -- ---------------------------------------------------------------------------
 -- api_calls — log de auditoria de toda chamada a APIs externas
 -- (Blueprint §5.3 e §6.4: request/response pareados com hash SHA-256)
+--
+-- Sprint 2 Fase 2: latency_ms/model/error_type dedicados para
+-- observabilidade de API. Derivar de started_at/finished_at/request_json
+-- seria aceitável mas queries analíticas ficam custosas — priorizar
+-- custo de query baixo. Vaults existentes recebem as colunas via
+-- migração idempotente em init_db() (PRAGMA table_info + ALTER TABLE).
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS api_calls (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,6 +126,9 @@ CREATE TABLE IF NOT EXISTS api_calls (
     started_at     TEXT NOT NULL,
     finished_at    TEXT,
     error_message  TEXT,
+    latency_ms     INTEGER,                            -- finished_at - started_at em ms
+    model          TEXT,                               -- ex: whisper-1, gpt-4o-mini
+    error_type     TEXT,                               -- connection|rate_limit|timeout|auth_error|bad_request|api_error|NULL
     created_at     TEXT NOT NULL
 );
 
