@@ -1,0 +1,12 @@
+{
+  "duration": 3.0,
+  "language": "portuguese",
+  "text": "",
+  "segments": [],
+  "usage": {
+    "seconds": 3.0,
+    "type": "duration"
+  },
+  "words": null,
+  "task": "transcribe"
+}
