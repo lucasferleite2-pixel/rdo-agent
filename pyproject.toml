@@ -37,6 +37,9 @@ dependencies = [
 
     # Opentimestamps
     "opentimestamps-client>=0.7.0",
+
+    # PDF generation (Sprint 3 §Fase 4)
+    "weasyprint>=60",
 ]
 
 [project.optional-dependencies]
