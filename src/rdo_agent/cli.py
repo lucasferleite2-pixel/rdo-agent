@@ -582,6 +582,85 @@ def detect_quality_cmd(obra: str, limit: int | None, throttle: float) -> None:
         sys.exit(1)
 
 
+@main.command(name="classify")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option("--limit", type=int, default=None, help="Maximo de classifications a processar")
+@click.option("--throttle", type=float, default=0.3, help="Pausa entre tasks (s)")
+def classify_cmd(obra: str, limit: int | None, throttle: float) -> None:
+    """Classificador semantico sobre classifications pending_classify (Sprint 3 Fase 3)."""
+    from rdo_agent.classifier.semantic_classifier import classify_handler
+    from rdo_agent.orchestrator import TaskType, init_db
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = init_db(vault_path)
+    rows = conn.execute(
+        "SELECT id FROM classifications WHERE obra = ? "
+        "AND semantic_status = 'pending_classify' ORDER BY id",
+        (obra,),
+    ).fetchall()
+    targets = [r[0] for r in rows]
+    if limit:
+        targets = targets[:limit]
+
+    console.print(f"[bold cyan]Classify:[/bold cyan] {obra}")
+    console.print(f"[bold cyan]Classifications pending_classify:[/bold cyan] {len(targets)}")
+    if not targets:
+        console.print("[yellow]Nenhuma classification pendente.[/yellow]")
+        conn.close()
+        return
+
+    existing = conn.execute(
+        "SELECT payload FROM tasks WHERE obra = ? AND task_type = 'classify' "
+        "AND status IN ('pending', 'running')",
+        (obra,),
+    ).fetchall()
+    already: set[int] = set()
+    for r in existing:
+        try:
+            already.add(int(json.loads(r[0])["classifications_id"]))
+        except (KeyError, ValueError, TypeError):
+            continue
+
+    enqueued = 0
+    for cid in targets:
+        if cid in already:
+            continue
+        _new_task(
+            conn,
+            task_type=TaskType.CLASSIFY,
+            payload={"classifications_id": cid},
+            obra=obra,
+        )
+        enqueued += 1
+    conn.close()
+    console.print(f"[green]+[/green] {enqueued} task(s) enfileiradas")
+
+    handlers_map = {TaskType.CLASSIFY: classify_handler}
+    done, failed, cost_usd, avg_lat_ms, interrupted = _process_with_progress(
+        vault_path=vault_path, obra=obra, handlers=handlers_map,
+        task_type_filter="classify", limit=limit, throttle=throttle,
+    )
+
+    summary = Table(title="Resumo classify", show_header=False)
+    summary.add_column("metrica", style="cyan", no_wrap=True)
+    summary.add_column("valor", style="bold")
+    summary.add_row("done", f"[green]{done}[/green]")
+    summary.add_row("failed", f"[red]{failed}[/red]" if failed else "0")
+    summary.add_row("custo", f"[green]US$ {cost_usd:.4f}[/green]")
+    summary.add_row("latencia media", f"{avg_lat_ms / 1000.0:.2f}s")
+    console.print("")
+    console.print(summary)
+    if interrupted:
+        sys.exit(130)
+    if failed > 0:
+        sys.exit(1)
+
+
 @main.command()
 @click.option("--obra", required=True, help="Identificador da obra")
 def review(obra: str) -> None:
