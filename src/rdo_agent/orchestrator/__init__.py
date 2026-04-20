@@ -70,6 +70,7 @@ class TaskType(str, Enum):
     EXTRACT_DOCUMENT = "extract_document"
 
     # Sprint 3
+    DETECT_QUALITY = "detect_quality"
     CLASSIFY = "classify"
 
     # Sprint 4

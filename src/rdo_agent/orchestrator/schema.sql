@@ -244,3 +244,71 @@ CREATE TABLE IF NOT EXISTS clusters (
 );
 
 CREATE INDEX IF NOT EXISTS idx_clusters_obra_date ON clusters(obra, event_date);
+
+
+-- ---------------------------------------------------------------------------
+-- classifications — output das Camadas 1 e 3 da Sprint 3
+--
+-- ADICIONADA EM SPRINT 3 §Fase 1. Ver docs/ADR-002-classifications-table-
+-- schema.md (+ adendo pós-implementação).
+--
+-- source_file_id aponta para o arquivo DERIVADO (20_transcriptions/*.txt,
+-- 20_visual_analyses/*.json, 20_documents/*.txt). source_type distingue
+-- o formato para que o classificador adapte prompt na Fase 3.
+--
+-- State machine:
+--   pending_quality  -> (detector)  -> pending_classify (se coerente)
+--                                    | pending_review   (se suspeita/ilegivel)
+--   pending_review   -> (humano)    -> pending_classify (corrigiu) | rejected
+--   pending_classify -> (classifier)-> classified
+--
+-- UNIQUE(obra, source_file_id) garante idempotência: reprocessar o
+-- mesmo arquivo sobrescreve atomicamente.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS classifications (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    obra                    TEXT NOT NULL,
+    source_file_id          TEXT NOT NULL,
+    source_type             TEXT NOT NULL,
+
+    -- Camada 1 (detector de qualidade, gpt-4o-mini)
+    quality_flag            TEXT,
+    quality_reasoning       TEXT,
+    human_review_needed     INTEGER NOT NULL DEFAULT 0,
+    quality_api_call_id     INTEGER,
+    quality_model           TEXT,
+
+    -- Camada 2 (revisão humana via CLI)
+    human_reviewed          INTEGER NOT NULL DEFAULT 0,
+    human_corrected_text    TEXT,
+    human_reviewed_at       TEXT,
+
+    -- Camada 3 (classificador semântico, gpt-4o-mini)
+    categories              TEXT NOT NULL DEFAULT '[]',
+    confidence_model        REAL,
+    reasoning               TEXT,
+    classifier_api_call_id  INTEGER,
+    classifier_model        TEXT,
+
+    -- Auditoria + state machine
+    source_sha256           TEXT NOT NULL,
+    semantic_status         TEXT NOT NULL DEFAULT 'pending_quality'
+                            CHECK (semantic_status IN (
+                                'pending_quality',
+                                'pending_review',
+                                'pending_classify',
+                                'classified',
+                                'rejected'
+                            )),
+    created_at              TEXT NOT NULL,
+    updated_at              TEXT,
+
+    FOREIGN KEY (source_file_id)         REFERENCES files(file_id),
+    FOREIGN KEY (quality_api_call_id)    REFERENCES api_calls(id),
+    FOREIGN KEY (classifier_api_call_id) REFERENCES api_calls(id),
+    UNIQUE (obra, source_file_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_classifications_obra_status ON classifications(obra, semantic_status);
+CREATE INDEX IF NOT EXISTS idx_classifications_review     ON classifications(human_review_needed, human_reviewed);
+CREATE INDEX IF NOT EXISTS idx_classifications_source    ON classifications(source_file_id);

@@ -339,7 +339,7 @@ def _process_with_progress(
 @click.option(
     "--task-type",
     type=click.Choice(
-        ["extract_audio", "extract_document", "transcribe", "visual_analysis"],
+        ["extract_audio", "extract_document", "transcribe", "visual_analysis", "detect_quality"],
         case_sensitive=False,
     ),
     default=None,
@@ -365,6 +365,7 @@ def _process_with_progress(
 )
 def process(obra, task_type, limit, dry_run, throttle):
     """Processa tasks pendentes da obra (dispatching para handlers registrados)."""
+    from rdo_agent.classifier.quality_detector import detect_quality_handler
     from rdo_agent.document_extractor import extract_document_handler
     from rdo_agent.extractor import extract_audio_handler
     from rdo_agent.orchestrator import TaskType
@@ -376,6 +377,7 @@ def process(obra, task_type, limit, dry_run, throttle):
         TaskType.EXTRACT_DOCUMENT: extract_document_handler,
         TaskType.TRANSCRIBE: transcribe_handler,
         TaskType.VISUAL_ANALYSIS: visual_analysis_handler,
+        TaskType.DETECT_QUALITY: detect_quality_handler,
     }
 
     task_type_norm = task_type.lower() if task_type else None
@@ -465,6 +467,90 @@ def process(obra, task_type, limit, dry_run, throttle):
     if failed > 0:
         sys.exit(1)
     sys.exit(0)
+
+
+@main.command(name="detect-quality")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option("--limit", type=int, default=None, help="Maximo de transcricoes a analisar")
+@click.option("--throttle", type=float, default=0.3, help="Pausa entre tasks (s)")
+def detect_quality_cmd(obra: str, limit: int | None, throttle: float) -> None:
+    """Enfileira e executa detector de qualidade em transcricoes sem classification."""
+    from rdo_agent.classifier.quality_detector import detect_quality_handler
+    from rdo_agent.orchestrator import TaskType, init_db, new_task
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = init_db(vault_path)
+    rows = conn.execute(
+        """
+        SELECT t.file_id FROM transcriptions t
+        LEFT JOIN classifications c
+          ON c.obra = t.obra AND c.source_file_id = t.file_id
+        WHERE t.obra = ? AND c.id IS NULL
+        ORDER BY t.id
+        """,
+        (obra,),
+    ).fetchall()
+    targets = [r[0] for r in rows]
+    if limit:
+        targets = targets[:limit]
+
+    console.print(f"[bold cyan]Detect-quality:[/bold cyan] {obra}")
+    console.print(f"[bold cyan]Transcricoes sem classification:[/bold cyan] {len(targets)}")
+    if not targets:
+        console.print("[yellow]Nenhuma transcricao pendente.[/yellow]")
+        conn.close()
+        return
+
+    existing = conn.execute(
+        "SELECT payload FROM tasks WHERE obra = ? AND task_type = 'detect_quality' "
+        "AND status IN ('pending', 'running')",
+        (obra,),
+    ).fetchall()
+    already: set[str] = set()
+    for r in existing:
+        try:
+            already.add(json.loads(r[0])["transcription_file_id"])
+        except (KeyError, ValueError, TypeError):
+            continue
+
+    enqueued = 0
+    for fid in targets:
+        if fid in already:
+            continue
+        new_task(
+            conn,
+            task_type=TaskType.DETECT_QUALITY,
+            payload={"transcription_file_id": fid},
+            obra=obra,
+        )
+        enqueued += 1
+    conn.close()
+    console.print(f"[green]+[/green] {enqueued} task(s) enfileiradas")
+
+    handlers_map = {TaskType.DETECT_QUALITY: detect_quality_handler}
+    done, failed, cost_usd, avg_lat_ms, interrupted = _process_with_progress(
+        vault_path=vault_path, obra=obra, handlers=handlers_map,
+        task_type_filter="detect_quality", limit=limit, throttle=throttle,
+    )
+
+    summary = Table(title="Resumo detect-quality", show_header=False)
+    summary.add_column("metrica", style="cyan", no_wrap=True)
+    summary.add_column("valor", style="bold")
+    summary.add_row("done", f"[green]{done}[/green]")
+    summary.add_row("failed", f"[red]{failed}[/red]" if failed else "0")
+    summary.add_row("custo", f"[green]US$ {cost_usd:.4f}[/green]")
+    summary.add_row("latencia media", f"{avg_lat_ms / 1000.0:.2f}s")
+    console.print("")
+    console.print(summary)
+    if interrupted:
+        sys.exit(130)
+    if failed > 0:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
