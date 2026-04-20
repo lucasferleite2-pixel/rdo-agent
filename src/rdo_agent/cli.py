@@ -582,5 +582,38 @@ def detect_quality_cmd(obra: str, limit: int | None, throttle: float) -> None:
         sys.exit(1)
 
 
+@main.command()
+@click.option("--obra", required=True, help="Identificador da obra")
+def review(obra: str) -> None:
+    """Revisao humana de classifications pending_review (Sprint 3 Fase 2)."""
+    from rdo_agent.classifier.human_reviewer import review_pending
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        stats = review_pending(conn, obra)
+    finally:
+        conn.close()
+
+    summary = Table(title="Resumo review", show_header=False)
+    summary.add_column("metrica", style="cyan", no_wrap=True)
+    summary.add_column("valor", style="bold")
+    summary.add_row("total pending_review", str(stats["total"]))
+    summary.add_row("accepted", f"[green]{stats['accepted']}[/green]")
+    summary.add_row("edited", f"[green]{stats['edited']}[/green]")
+    summary.add_row("rejected", f"[yellow]{stats['rejected']}[/yellow]")
+    summary.add_row("skipped", f"[dim]{stats['skipped']}[/dim]")
+    if stats["quit_early"]:
+        summary.add_row("saida", "[yellow]Q (quit) pelo operador[/yellow]")
+    console.print("")
+    console.print(summary)
+
+
 if __name__ == "__main__":
     main()
