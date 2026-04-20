@@ -11,13 +11,13 @@ Após E2E concluído contra `EVERALDO_SANTAQUITERIA`, o sistema tem:
 - **Fase 2 (TRANSCRIBE/Whisper):** 105/105 áudios transcritos, 0 falhas, 0 sentinels, custo US$ 0.2507, duração 5min 33s
 - **Fase 3 (VISUAL_ANALYSIS/Vision):** 10/10 imagens analisadas, 0 falhas, 4 sentinels legítimos, custo US$ 0.3024, duração ~1min
 - Suite completa: **134/134 verde** (+10 testes do visual_analyzer agregados à suite anterior de 124)
-- Dois scripts ad-hoc descartáveis funcionais: `run_phase2_e2e.py`, `run_phase3_e2e.py`
+- CLI unificada `rdo-agent process` + `rdo-agent status` (commit `ba4e255`) — substituiu os scripts ad-hoc, deletados em `b97d6d5`
 - Três bugs descobertos durante E2E, todos com fix commitado
 - Primeiro registro empírico do sistema operando fim-a-fim em dados de produção
 
 **Gasto acumulado durante validação:** US$ 0.56 (Fases 2 + 3 somadas, incluindo smokes).
 
-**Estado do Sprint 2:** Fases 1-3 completas e validadas. Fase 4 (CLI `rdo-agent worker`) pendente.
+**Estado do Sprint 2:** ✅ **FECHADO** em 2026-04-20. Fases 1-4 completas e validadas contra vault real. Tag git: `v0.2.0-sprint2` (se criada).
 
 ---
 
@@ -267,7 +267,7 @@ Esse padrão deve ser replicado em Sprint 3/4 se houver handlers que peçam desc
 
 ### 10. Scripts `run_phase*_e2e.py` como ferramentas descartáveis
 
-Decisão consciente: **não investir em CLI definitivo agora** (Fase 4 do Sprint 2 está planejada para isso). Os scripts `run_phase2_e2e.py` e `run_phase3_e2e.py` são idênticos em 90% do código; o Phase 3 foi gerado do Phase 2 via 13 substituições sed. Ambos serão deletados quando o `rdo-agent worker` CLI estiver implementado.
+Decisão consciente: **não investir em CLI definitivo agora** (Fase 4 do Sprint 2 está planejada para isso). Os scripts `run_phase2_e2e.py` e `run_phase3_e2e.py` são idênticos em 90% do código; o Phase 3 foi gerado do Phase 2 via 13 substituições sed. Ambos foram deletados no commit `b97d6d5` após o `rdo-agent process` CLI ser implementado em `ba4e255`.
 
 Vantagem dessa decisão: E2E foi validado em 2 dias em vez de 1 semana. Custo: ~500 linhas de código descartável rastreável em commits.
 
@@ -406,39 +406,36 @@ Dados lado-a-lado para comparação empírica:
 - **Fase 1 (EXTRACT_DOCUMENT):** completa (Sprint 1)
 - **Fase 2 (TRANSCRIBE):** ✅ validada E2E — 105/105 sucesso
 - **Fase 3 (VISUAL_ANALYSIS):** ✅ validada E2E — 10/10 sucesso
-- **Fase 4 (CLI `rdo-agent worker`):** não iniciada
+- **Fase 4 (CLI `rdo-agent process` + `rdo-agent status`):** ✅ concluída (commit `ba4e255`, 2026-04-20 12:54 UTC). Scripts ad-hoc removidos em `b97d6d5`.
 
 **Suite:** 134/134 verde local.  
 **Commits últimos 2 dias:** 4 (b5aecf8, 38c481b, ca4b2e4, 771311a).  
 **Gasto total validação:** US$ 0.56.
 
-### Recomendação: fechar Sprint 2 com Fase 4 antes de avançar para Sprint 3
+### Retrospectiva do fechamento
 
-**Rationale:**
+Fase 4 foi iniciada em 2026-04-20 manhã logo após a retrospectiva das Fases 2 e 3 ser escrita. O escopo permaneceu contido (apenas `process` + `status`), conforme plano original, e o `run_worker` existente do orchestrator foi preservado sem modificações — a CLI é apenas um wrapper com progress bar, filtros, SIGINT graceful e registro dos handlers no dict `HANDLERS`.
 
-1. Scripts `run_phase2_e2e.py` e `run_phase3_e2e.py` são dívida técnica explícita — 500 linhas duplicadas que precisam morrer
-2. Sprint 3 (classificador) vai consumir o que Sprint 2 produziu — melhor ter CLI unificada antes de encadear
-3. CLI expõe o orchestrator real, que é testado via `run_worker` unitário mas ainda não validado contra dados reais
-4. Fase 4 é a fase "fácil" do sprint — boa oportunidade de descansar e consolidar antes do esforço de Sprint 3
+Descobertas durante a Fase 4:
 
-### Alternativas consideradas
+1. **`next_pending` já resolvia `depends_on` desde Sprint 1** — a query com `json_each(depends_on)` + `NOT EXISTS` era elegante e completa. Zero trabalho adicional em graph de dependências.
+2. **Decisão arquitetural corrigida pelo Claude Code:** meu prompt sugeria filtrar `task_type` no consumidor, mas o Claude Code identificou que SQLite sem `SKIP LOCKED` causaria re-fetch infinito — correto filtrar na query (`_fetch_next_eligible`).
+3. **Idempotência validada em produção:** o smoke da task 1 via CLI retornou o mesmo `result_ref=f_22e21dda92e2` do smoke de 19/abril, provando que o SHA256-based file_id do handler funciona corretamente em runs repetidos.
 
-- **Pular Fase 4 e partir direto pra Sprint 3:** mantém os scripts como dívida; Sprint 3 roda em cima de scripts ad-hoc; eventualmente CLI precisa ser feita de qualquer forma. Não recomendado.
-- **Combinar Fase 4 com Sprint 3:** CLI + classificador juntos. Aumenta escopo, perde modularidade.
+### Sprint 2 — encerrado
 
-### Próximo passo concreto
+**Commits do Sprint 2 (8 no total):**
 
-Iniciar Fase 4 com prompt detalhado ao Claude Code gerando `src/rdo_agent/cli/worker.py` com:
+- `ba4e255` feat(cli): comando 'process' + 'status' (Fase 4)
+- `b97d6d5` chore: remove scripts E2E ad-hoc
+- `db0cab8` docs: retrospectiva consolidada Fases 2+3
+- `771311a` feat: run_phase3_e2e.py (removido em b97d6d5)
+- `ca4b2e4` fix: 3 defesas anti-alucinação Vision
+- `38c481b` feat: run_phase2_e2e.py (removido em b97d6d5)
+- `b5aecf8` fix: rename .opus → .ogg Whisper
+- (+ commits anteriores de 18/abril fora do escopo de E2E)
 
-- argparse (ou typer) com subcomando `worker --obra X --task-type Y --limit N`
-- Reaproveita a lógica de loop dos dois scripts E2E (dispatch por `task_type`)
-- Adiciona grafo de dependências (`depends_on`) que os scripts ad-hoc ignoravam
-- Suporta modo `--dry-run` para simulação
-- Documenta em `pyproject.toml` como entry point console
-
-Após Fase 4 validada, os scripts `run_phase*_e2e.py` são deletados com commit `chore: remove ad-hoc E2E runners (superseded by rdo-agent worker)`.
-
----
+**Próximo marco:** Sprint 3 (classificador semântico). Plano em `docs/SPRINT3_PLAN.md` (a escrever).
 
 ## Anexo A — Commits relevantes
 
@@ -460,14 +457,20 @@ Para reexecutar E2E completo em nova vault (supondo ingest já feito):
 cd ~/projetos/rdo-agent
 source .venv/bin/activate
 
-# Fase 2
-python scripts/run_phase2_e2e.py --obra NOME_OBRA 2>&1 | tee ~/rdo-e2e-fase2-log.txt
+# Ver estado da obra antes de processar
+rdo-agent status --obra NOME_OBRA
 
-# Fase 3
-python scripts/run_phase3_e2e.py --obra NOME_OBRA 2>&1 | tee ~/rdo-e2e-fase3-log.txt
+# Dry-run pra prever o que será processado
+rdo-agent process --obra NOME_OBRA --dry-run
+
+# Processa todos os tipos de task pendentes
+rdo-agent process --obra NOME_OBRA
+
+# Ou filtrado por tipo específico
+rdo-agent process --obra NOME_OBRA --task-type transcribe --throttle 0.3
 ```
 
-Estado dos logs em `~/rdo-e2e-fase*-log.txt` serve como registro auditável para retrospectiva.
+O estado forense é auditável diretamente via `rdo-agent status --obra NOME_OBRA` e por queries SQL contra `tasks` e `api_calls` no `index.sqlite`. Logs de texto são dispensáveis.
 
 ---
 
