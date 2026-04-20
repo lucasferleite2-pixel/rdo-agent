@@ -26,7 +26,7 @@ Decisões arquiteturais (alinhadas à retrospectiva da Fase 2):
 Arquitetura de teste (4 camadas, docs/SPRINT2_PLAN.md §4):
   - Unitários: monkeypatch _get_openai_client → FakeClient.
   - Golden fixture: tests/fixtures/vision_golden_response.json
-    (pendente — será capturada no fechamento da Fase 3).
+    (capturada — commit 230374f).
   - Smoke manual + E2E: rodam contra GPT-4o Vision real.
 """
 
@@ -221,6 +221,9 @@ def _validate_schema(payload: object) -> tuple[bool, str]:
     empty = [k for k in REQUIRED_FIELDS if not payload.get(k)]
     if empty:
         return False, f"empty_fields:{','.join(empty)}"
+    total_chars = sum(len(str(payload.get(k, ""))) for k in REQUIRED_FIELDS)
+    if total_chars < 100:
+        return False, f"response_too_short:{total_chars}_chars"
     return True, "ok"
 
 
@@ -301,7 +304,7 @@ def _call_vision_with_retry(
             "role": "user",
             "content": [
                 {"type": "text", "text": USER_PROMPT},
-                {"type": "image_url", "image_url": {"url": image_data_url}},
+                {"type": "image_url", "image_url": {"url": image_data_url, "detail": "high"}},
             ],
         },
     ]
@@ -315,6 +318,7 @@ def _call_vision_with_retry(
         "response_format": RESPONSE_FORMAT,
         "image_filename": image_path.name,
         "image_sha256": sha256_file(image_path),
+        "image_detail": "high",
     }
     request_json = json.dumps(
         request_body_for_hash, sort_keys=True, ensure_ascii=False,
@@ -376,9 +380,18 @@ def _call_vision_with_retry(
         )
         response_hash = sha256_text(response_json)
 
-        usage = response_dict.get("usage") or {}
-        prompt_tokens = int(usage.get("prompt_tokens") or 0)
-        completion_tokens = int(usage.get("completion_tokens") or 0)
+        usage = response_dict.get("usage")
+        if not usage:
+            log.warning(
+                "Vision response sem campo 'usage'; cost_usd será 0.0 — "
+                "auditar api_call subsequente (request_hash=%s)",
+                request_hash,
+            )
+            prompt_tokens = 0
+            completion_tokens = 0
+        else:
+            prompt_tokens = int(usage.get("prompt_tokens") or 0)
+            completion_tokens = int(usage.get("completion_tokens") or 0)
         cost_usd = _compute_cost_usd(prompt_tokens, completion_tokens, MODEL)
 
         api_call_id = _log_api_call(
