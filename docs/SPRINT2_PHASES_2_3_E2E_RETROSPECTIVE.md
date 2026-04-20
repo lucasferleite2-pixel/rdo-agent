@@ -475,3 +475,97 @@ O estado forense é auditável diretamente via `rdo-agent status --obra NOME_OBR
 ---
 
 *Documento escrito em 2026-04-20 manhã, após E2E validado de ambas as fases. Autor: Lucas Ferreira Leite com auxílio de Claude (Anthropic).*
+---
+
+## Adendo 2026-04-20 tarde — Revisão empírica da afirmação "zero alucinações"
+
+**Este adendo foi adicionado em 2026-04-20 entre 13:00 e 15:00 BRT, durante transição Sprint 2 → Sprint 3. O corpo original desta retrospectiva é preservado intacto acima como registro histórico de como os fatos foram percebidos no momento de fechamento do Sprint 2. Este adendo documenta o que foi descoberto depois, não corrige o texto anterior.**
+
+### Contexto do adendo
+
+Ao iniciar calibração de categorias da Sprint 3 (exercício de classificação manual de 30 transcrições reais da vault EVERALDO_SANTAQUITERIA), Lucas identificou que a primeira transcrição da amostra era semanticamente muito distante do áudio real:
+
+- **Whisper entregou:** *"Aí, no caso, o barro se fechamenta e tem com a tela, né? Ou a tela é por conta do 6A."*
+- **Áudio real:** *"Aí no caso por baixo do fechamento tem que por uma tela, né? Ou a tela é por conta do cês lá?"*
+
+Três erros graves em uma frase curta: "por baixo do fechamento" virou a palavra inexistente "barro se fechamenta"; "tem que por uma tela" (ação) virou "tem com a tela" (descrição); "cês lá" (vocês lá, coloquial mineiro) virou "6A" (parecido com especificação técnica plausível).
+
+Essa observação motivou um spike empírico de comparação de modelos (registrado em `docs/ADR-001-transcription-model-selection.md`).
+
+### O que o spike revelou
+
+**Word Error Rate (WER) médio do baseline atual** (`whisper-1` sem prompt) em amostra de 5 áudios diversos: **46.4%**. Distribuição:
+
+| Áudio | Duração | WER |
+|-------|---------|-----|
+| Curta (28 chars) | ~5s | 0.0% |
+| Longa (2061 chars) | 129s | 52.6% |
+| Alta confidence (1109 chars) | 50s | 51.9% |
+| Mediana (212 chars) | 22s | 47.5% |
+| Baixa confidence (116 chars) | 17s | 80.0% |
+
+A métrica `confidence` reportada pelo Whisper (média 0.55 no dataset, tida como "aceitável para sotaque mineiro") **não correlaciona com WER real**. O áudio #3 tem confidence alta (0.874) e WER 51.9%. O áudio #5 tem confidence baixa (0.405) e WER 80%. Mas o confidence mede certeza **do modelo sobre sua própria transcrição**, não fidelidade ao áudio — conforme documentado em literatura do Whisper. A Sprint 2 interpretou confidence como proxy de qualidade; **essa interpretação estava errada**.
+
+### Revisão da afirmação "0 alucinações observadas"
+
+A Parte I desta retrospectiva afirma:
+> *Nenhuma alucinação observada (tipo "Obrigado por assistir!" em silêncio, erro conhecido do Whisper). Zero transcrições vazias.*
+
+Essa afirmação é **falsa no critério forense mais rigoroso**, mas foi **correta no critério observado em 19-20/abril** (ausência dos padrões de alucinação conhecidos em voz humana). O que o spike revelou:
+
+1. **Inversão de sujeitos.** Áudio #2: *"eu tomo umas cacetada aqui também"* (1ª pessoa) virou *"ele tem que comprar carro zero"* (3ª pessoa). Sujeito inventado, informação original perdida.
+
+2. **Palavras obscenas inventadas.** Áudio #2: *"umas fotos de umas notinhas"* virou *"umas foda notinha"*. Whisper alucinou vocabulário sexual onde o áudio era mundano.
+
+3. **Frases inteiras fabricadas.** Áudio #2: depois de *"eu vou jogar aquelas tesouras pra cima"*, o áudio continua *"cê num sabe se aquele trem tá conferindo"*. Whisper produziu: *"você quer tentar tá conferindo"*. "Quer tentar" é ficção.
+
+4. **Omissão de informação crítica.** Áudio #5: final do áudio contém *"eu tenho umas 5 máquinas de solda"*. Whisper omitiu completamente essa sentença, substituindo por *"ou tem que ter uma super mais forte"* (invenção).
+
+5. **Loop catastrófico em fala com gaguejo.** Áudio #3: locutor gaguejou *"nao, nu...nu...num tem problema"*. Whisper interpretou o padrão como repetição infinita e produziu ~250 instâncias da palavra "não" consecutivas, ocupando 1097 chars do output. Os ~45s restantes do áudio **foram transcritos como parte da repetição, não como seu conteúdo real**. Para o pipeline downstream, esse áudio é texto 100% inútil.
+
+6. **Perda sistemática do registro coloquial mineiro.** Whisper converte `cê → você`, `sô → só`, `num → não`, `tô → estou`, `tá → está`, `ocê → você`. Isso muda o **registro semântico** da fala: *"cê num ta errado não"* (tom conciliador) vira *"você tá errado"* (tom acusatório) — inversão de polaridade.
+
+7. **Perda de termos técnicos específicos.** Áudio #4: `ripa` (vergalhão de madeira) virou `repa`. Áudio #5: `MIG` (máquina de solda MIG/MAG) virou `amiga`. Erros de 1-2 fonemas em palavras-chave de engenharia.
+
+### Consequência interpretativa
+
+A Parte V lição 3 desta retrospectiva estabelece:
+> *Distinguir "falha" de "lixo legítimo" com sentinels. Em pipelines forenses, três categorias coexistem: dado válido, lixo legítimo (sentinel), falha.*
+
+O spike adiciona uma **quarta categoria não detectada em Sprint 2**:
+> **Dado aparentemente válido mas semanticamente distorcido.** Task `done`, `duration` correta, `confidence` dentro da faixa, texto não-vazio, sem repetições textuais óbvias — mas conteúdo informacional perdido ou invertido.
+
+Essa categoria é a mais perigosa porque **não há sinal interno do pipeline que a detecte**. Requer comparação com ground truth externo (áudio original + escuta humana) para ser identificada.
+
+### Decisão de não-retrabalho
+
+Os testes do spike (3 configurações × 5 áudios = 15 chamadas de API, custo ~$0.15) demonstraram que **nenhuma alternativa disponível via OpenAI API reduz WER abaixo de 46.4% do baseline atual**:
+
+- `gpt-4o-transcribe` sem prompt: WER médio 55.2% (pior que baseline)
+- `whisper-1` + prompt contextual mineiro: WER médio 53.6% (pior que baseline, com caso catastrófico de 94.4% no áudio longo devido a deleção agressiva induzida pelo prompt)
+
+Detalhes técnicos completos em `docs/ADR-001-transcription-model-selection.md`.
+
+Dado o prazo de Sprint 3 (RDO piloto em 14 dias desde 2026-04-20), **reprocessar a vault com alternativa inferior seria desperdício** ($0.50+ de custo, output pior que o atual). Decisão registrada no ADR: **manter whisper-1 sem prompt e pivotar design da Sprint 3** para incluir detector de qualidade de transcrição + pipeline de revisão humana por amostragem.
+
+### Implicações para Sprints futuras
+
+**Sprint 3 (imediato):** arquitetura em 4 camadas, não mais apenas "classificador":
+1. Detector de qualidade de transcrição (gpt-4o-mini lê texto, flag: coerente | suspeito | ilegível)
+2. Interface de revisão humana (usuário ouve áudio + corrige texto flagged)
+3. Classificador semântico (gpt-4o-mini) sobre texto revisado
+4. Output em tabela dedicada (ADR-002 a ser escrita)
+
+**Sprint 4 (agente-engenheiro Claude):** classificações levam tag de proveniência (revisada | aceita como entregue pelo Whisper). Claude ajusta confiança narrativa de acordo.
+
+**Sprint 5+ (hardening / piloto):** explorar Whisper Large-v3 self-hosted em GPU local ou fine-tuning da OpenAI se escala do projeto justificar. Não priorizado no MVP.
+
+### Honestidade metodológica
+
+A retrospectiva original foi escrita de boa-fé em 2026-04-20 manhã, com base nos dados então disponíveis. O erro de interpretação ("confidence como proxy de qualidade", "ausência de padrões conhecidos de alucinação como evidência de fidelidade") é comum em desenvolvimento de pipelines de ML, e especificamente em pipelines de transcrição onde ground truth não é trivial de estabelecer.
+
+**A lição metodológica extraída:** antes de declarar fase "completa" em pipeline com API externa estocástica, validar conteúdo contra ground truth humano em amostra ≥ 5 itens diversos. Custo da validação tardia (este adendo + pivô da Sprint 3) foi ~4h de trabalho e ~$0.15 em API — prejuízo aceitável. Custo caso a descoberta tivesse vindo depois da Sprint 3 concluída: potencialmente 3-5 dias de refatoração + perda de credibilidade do MVP com fiscal SEE-MG.
+
+Este adendo fecha o Sprint 2 com precisão maior — não invalidando o que foi feito, mas reconhecendo explicitamente o que não foi medido na hora.
+
+*Registro: 2026-04-20 tarde, durante transição Sprint 2 → Sprint 3. Autor: Lucas Ferreira Leite com análise de Claude / Anthropic.*
