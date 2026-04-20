@@ -221,12 +221,18 @@ def _call_whisper_with_retry(
 
         try:
             with open(audio_path, "rb") as f:
+                # Whisper rejeita .opus por nome mesmo quando o container é OGG/Opus
+                # válido. Renomeamos só o nome de upload; o disco e o request_hash
+                # abaixo continuam capturando o nome original (registro forense).
+                upload_name = audio_path.name
+                if audio_path.suffix.lower() == ".opus":
+                    upload_name = audio_path.stem + ".ogg"
                 response = client.audio.transcriptions.create(
                     model=MODEL,
                     language=LANGUAGE,
                     temperature=TEMPERATURE,
                     response_format=RESPONSE_FORMAT,
-                    file=f,
+                    file=(upload_name, f, "audio/ogg"),
                 )
         except Exception as exc:
             finished_dt = datetime.now(UTC)
