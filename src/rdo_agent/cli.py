@@ -334,6 +334,35 @@ def _process_with_progress(
     return done, failed, cost_total, avg_lat_ms, state["interrupted"]
 
 
+def _new_task(
+    conn: sqlite3.Connection,
+    *,
+    task_type,
+    payload: dict,
+    obra: str,
+) -> int:
+    """
+    Helper local que encapsula Task(...) + enqueue() para a CLI.
+
+    O comando detect-quality (Sprint 3 Fase 1) importava new_task do
+    orchestrator, mas a funcao nao existe — orchestrator expoe apenas
+    enqueue(conn, task). Este wrapper restaura o call-site sem tocar
+    em orchestrator/__init__.py (blacklist).
+    """
+    from rdo_agent.orchestrator import Task, TaskStatus, enqueue
+
+    task = Task(
+        id=None,
+        task_type=task_type,
+        payload=payload,
+        status=TaskStatus.PENDING,
+        depends_on=[],
+        obra=obra,
+        created_at="",
+    )
+    return enqueue(conn, task)
+
+
 @main.command()
 @click.option("--obra", required=True, help="Identificador da obra")
 @click.option(
@@ -476,7 +505,7 @@ def process(obra, task_type, limit, dry_run, throttle):
 def detect_quality_cmd(obra: str, limit: int | None, throttle: float) -> None:
     """Enfileira e executa detector de qualidade em transcricoes sem classification."""
     from rdo_agent.classifier.quality_detector import detect_quality_handler
-    from rdo_agent.orchestrator import TaskType, init_db, new_task
+    from rdo_agent.orchestrator import TaskType, init_db
 
     vault_path = config.get().vault_path(obra)
     db_path = vault_path / "index.sqlite"
@@ -522,7 +551,7 @@ def detect_quality_cmd(obra: str, limit: int | None, throttle: float) -> None:
     for fid in targets:
         if fid in already:
             continue
-        new_task(
+        _new_task(
             conn,
             task_type=TaskType.DETECT_QUALITY,
             payload={"transcription_file_id": fid},
