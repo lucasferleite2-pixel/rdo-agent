@@ -62,6 +62,8 @@ Converter 105 transcrições Whisper da vault EVERALDO_SANTAQUITERIA em **classi
 
 **Custo estimado:** ~$0.03 + 3 dias dev.
 
+- [x] **Concluída 2026-04-20** (sessão autônoma). 105/105 processadas em produção contra vault EVERALDO; 33 `pending_review` (31.4%, dentro da tolerância); custo real US$ 0.0115. Código em commit `a7c154d`; fix de bug no CLI (`new_task` → `_new_task`) em `7e18415`.
+
 ### Fase 2 — Interface de Revisão Humana (dias 4-7)
 
 **Entregáveis:**
@@ -72,6 +74,8 @@ Converter 105 transcrições Whisper da vault EVERALDO_SANTAQUITERIA em **classi
 **Critério V2:** todas transcrições pending_review processáveis via CLI; áudio reproduz.
 
 **Custo estimado:** 0 financeiro + 3-4 dias dev + ~1h revisão real de Lucas.
+
+- [x] **Código concluído 2026-04-20** (sessão autônoma, commit `36d10cd`). Módulo `classifier/human_reviewer.py` + comando `rdo-agent review` + 10 testes verdes + `docs/SPRINT3_REVIEW_WORKFLOW.md`. Player de áudio não implementado (decidido fora de escopo; CLI mostra `audio_path`). Execução da revisão pelo operador ainda pendente.
 
 ### Fase 3 — Classificador Semântico (dias 8-11)
 
@@ -89,6 +93,8 @@ Converter 105 transcrições Whisper da vault EVERALDO_SANTAQUITERIA em **classi
 
 **Custo estimado:** ~$0.30 + 4 dias dev.
 
+- [x] **Código concluído 2026-04-20** (sessão autônoma, commit `4dc5f56`). Módulo `classifier/semantic_classifier.py` + comando `rdo-agent classify` + 23 testes com mocks verdes. Prompt inclui 5 few-shot extraídos da amostra calibrada com valores monetários anonimizados. Execução em produção + critérios Q1/Q2 pendentes (Lucas).
+
 ### Fase 4 — Integração E2E + RDO Piloto (dias 12-14)
 
 **Entregáveis:**
@@ -99,6 +105,8 @@ Converter 105 transcrições Whisper da vault EVERALDO_SANTAQUITERIA em **classi
 **Critério V4:** RDO piloto existe; >= 80% do conteúdo rastreável; Lucas aprovou visualmente.
 
 **Custo estimado:** 0 financeiro + 3 dias dev.
+
+- [x] **Código concluído 2026-04-20** (sessão autônoma, commit `6c2633f`). Script `scripts/generate_rdo_piloto.py` + 11 testes verdes + `docs/SPRINT3_RESULTS.md`. PDF via weasyprint (instalado no venv; ainda não em `pyproject.toml`). RDO real contra vault pendente — depende da Fase 3 rodar em produção primeiro.
 
 ## Orçamento consolidado
 
