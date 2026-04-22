@@ -789,5 +789,191 @@ def review(obra: str) -> None:
     console.print(summary)
 
 
+@main.command(name="narrate")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option(
+    "--dia", default=None,
+    help="Data YYYY-MM-DD; se fornecido, gera narrativa do dia",
+)
+@click.option(
+    "--scope",
+    type=click.Choice(["day", "obra", "both"], case_sensitive=False),
+    default=None,
+    help=(
+        "Escopo de geracao: 'day' (so o dia), 'obra' (so overview), "
+        "'both' (ambos). Default: 'day' se --dia, senao 'obra'."
+    ),
+)
+@click.option(
+    "--skip-cache", is_flag=True, default=False,
+    help="Ignora cache UNIQUE e regenera mesmo se dossier_hash ja existe",
+)
+@click.option(
+    "--reports-root", default="reports/narratives",
+    help="Diretorio raiz para arquivos markdown (default reports/narratives)",
+)
+def narrate_cmd(
+    obra: str, dia: str | None, scope: str | None,
+    skip_cache: bool, reports_root: str,
+) -> None:
+    """Gera narrativa forense (Sprint 5 Fase A) via agente Sonnet 4.6."""
+    from rdo_agent.forensic_agent import (
+        build_day_dossier,
+        build_obra_overview_dossier,
+        compute_dossier_hash,
+        narrate,
+        save_narrative,
+        validate_narrative,
+    )
+    from rdo_agent.orchestrator import init_db
+
+    # Resolve scope default
+    if scope is None:
+        scope_resolved = "day" if dia else "obra"
+    else:
+        scope_resolved = scope.lower()
+
+    if scope_resolved in ("day", "both") and not dia:
+        console.print(
+            "[red]x --dia eh obrigatorio para scope 'day' ou 'both'[/red]"
+        )
+        sys.exit(2)
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    # Validate anthropic key early
+    if not config.get().anthropic_api_key:
+        console.print(
+            "[red]x ANTHROPIC_API_KEY ausente.[/red] Configure em .env "
+            "para gerar narrativas."
+        )
+        sys.exit(3)
+
+    conn = init_db(vault_path)
+    reports_path = Path(reports_root)
+    results_summary: list[dict] = []
+    total_cost = 0.0
+
+    scopes_to_run: list[tuple[str, str | None]] = []
+    if scope_resolved in ("day", "both"):
+        scopes_to_run.append(("day", dia))
+    if scope_resolved in ("obra", "both"):
+        scopes_to_run.append(("obra_overview", None))
+
+    for sc, ref in scopes_to_run:
+        console.print(
+            f"\n[bold cyan]Gerando narrativa[/bold cyan] "
+            f"obra={obra} scope={sc} ref={ref or '(overview)'}"
+        )
+        if sc == "day":
+            dossier = build_day_dossier(conn, obra, ref)
+        else:
+            dossier = build_obra_overview_dossier(conn, obra)
+
+        events_count = dossier["statistics"]["events_total"]
+        if events_count == 0:
+            console.print(
+                f"[yellow]- nenhum evento classificado para {sc} {ref}; "
+                "pulando[/yellow]"
+            )
+            continue
+
+        dossier_hash = compute_dossier_hash(dossier)
+
+        # Cache check (unless skip_cache)
+        if not skip_cache:
+            from rdo_agent.forensic_agent.persistence import (
+                _find_existing_narrative,
+            )
+            existing = _find_existing_narrative(
+                conn, obra, sc, ref, dossier_hash,
+            )
+            if existing:
+                console.print(
+                    f"[dim]- cache hit (id={existing}); use --skip-cache "
+                    "para regenerar[/dim]"
+                )
+                results_summary.append({
+                    "scope": sc, "ref": ref, "cached": True,
+                    "narrative_id": existing, "passed": None,
+                })
+                continue
+
+        try:
+            narration = narrate(dossier, conn)
+        except Exception as exc:
+            console.print(
+                f"[red]x falha na geracao ({type(exc).__name__}): "
+                f"{str(exc)[:200]}[/red]"
+            )
+            results_summary.append({
+                "scope": sc, "ref": ref, "cached": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            continue
+
+        total_cost += narration.cost_usd
+
+        validation = validate_narrative(
+            narration.markdown_body, dossier,
+            narration.self_assessment, narration.markdown_text,
+        )
+
+        narrative_id, path, was_cached = save_narrative(
+            conn, obra=obra, scope=sc, scope_ref=ref,
+            dossier_hash=dossier_hash, narration=narration,
+            validation=validation, events_count=events_count,
+            reports_root=reports_path,
+        )
+
+        results_summary.append({
+            "scope": sc, "ref": ref, "cached": was_cached,
+            "narrative_id": narrative_id, "path": str(path),
+            "passed": validation["passed"],
+            "warnings_count": len(validation["warnings"]),
+            "cost_usd": narration.cost_usd,
+            "malformed": narration.is_malformed,
+        })
+        status = "[green]PASSED[/green]" if validation["passed"] else "[yellow]WARNINGS[/yellow]"
+        console.print(
+            f"[green]+[/green] id={narrative_id} path={path} "
+            f"{status} cost=US$ {narration.cost_usd:.4f}"
+        )
+
+    conn.close()
+
+    # Resumo final
+    summary_table = Table(title="Resumo narrate", show_header=True)
+    summary_table.add_column("scope", style="cyan")
+    summary_table.add_column("ref")
+    summary_table.add_column("status")
+    summary_table.add_column("passed")
+    summary_table.add_column("warnings", justify="right")
+    summary_table.add_column("cost", justify="right")
+    for r in results_summary:
+        scope_str = r["scope"]
+        ref_str = r["ref"] or "(overview)"
+        if r.get("error"):
+            summary_table.add_row(scope_str, ref_str, "[red]ERROR[/red]",
+                                  "—", "—", "—")
+        elif r["cached"]:
+            summary_table.add_row(scope_str, ref_str, "[dim]cached[/dim]",
+                                  "—", "—", "—")
+        else:
+            passed_str = "[green]YES[/green]" if r["passed"] else "[yellow]NO[/yellow]"
+            summary_table.add_row(
+                scope_str, ref_str, "new", passed_str,
+                str(r.get("warnings_count", 0)),
+                f"US$ {r.get('cost_usd', 0.0):.4f}",
+            )
+    console.print("")
+    console.print(summary_table)
+    console.print(f"\n[bold]Custo total:[/bold] US$ {total_cost:.4f}")
+
+
 if __name__ == "__main__":
     main()
