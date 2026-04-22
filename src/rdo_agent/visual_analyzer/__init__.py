@@ -80,7 +80,19 @@ MIME_TYPES: dict[str, str] = {
     ".gif":  "image/gif",
 }
 
-SYSTEM_PROMPT = (
+# Sprint 4 Op9 — Vision prompts versionados.
+# V1 (original, Sprint 2): instrucao minimal "descreva o visivel".
+# V2 (Op9, calibrada): few-shot derivado de 11 amostras com ground truth
+# humano. Correcoes centrais: estado final observavel = reporte_execucao;
+# material solto = material (nao off_topic); desenho tecnico fotografado =
+# especificacao_tecnica. Sugere `categoria_sugerida` pra facilitar downstream.
+# REQUIRED_FIELDS permanece igual (4 campos V1): campos extras do V2 sao
+# opcionais e nao afetam _validate_schema — backward compat total.
+#
+# Feature flag: VISION_PROMPT_VERSION. "v1" -> prompt legado;
+# "v2" (default) -> prompt calibrado. Rollback: export VISION_PROMPT_VERSION=v1.
+
+SYSTEM_PROMPT_V1 = (
     "Você é um engenheiro civil analisando fotos de canteiro de obra no Brasil. "
     "Descreva APENAS o que é visível na imagem. Se não tem certeza de algum "
     "elemento, marque como 'não identificado'. NUNCA invente detalhes. "
@@ -88,6 +100,76 @@ SYSTEM_PROMPT = (
     "exatamente as 4 chaves: elementos_construtivos, atividade_em_curso, "
     "condicoes_ambiente, observacoes_tecnicas. Cada valor é uma string "
     "descritiva (200-2000 caracteres somados)."
+)
+
+SYSTEM_PROMPT_V2 = """Você é um analisador forense de fotos de canteiro de obras civil, especializado em contexto de construção pública brasileira (contratos SEE-MG, empreiteiros). Sua tarefa: extrair informação estruturada sobre o que está visível na imagem.
+
+# Contexto importante
+
+- Você está analisando fotos de CANTEIRO, não documentos (documentos vão por outro pipeline).
+- Estado FINAL (estrutura montada sem pessoas) também é reporte relevante — não descarte como "sem atividade"
+- Fotos de equipamentos/materiais SOZINHOS (sem pessoa operando) ainda são evidência de material presente
+- Medições, marcações e indicações dimensionais são REPORTE DE EXECUÇÃO válido
+- Desenhos técnicos fotografados são ESPECIFICAÇÃO TÉCNICA (mesmo sem "atividade visível")
+- Fotos de trabalho em OUTRO canteiro (não o nosso) são off_topic, mas devem ser identificados como tal
+- Acidentes pessoais (trator tombado etc.) são off_topic mas de interesse contextual
+
+# Schema de resposta (JSON válido, sem markdown)
+
+Retorne um objeto JSON com ESTES 4 campos OBRIGATÓRIOS (compatibilidade com pipeline existente):
+  - "elementos_construtivos"
+  - "atividade_em_curso"
+  - "condicoes_ambiente"
+  - "observacoes_tecnicas"
+
+Adicionalmente, inclua ESTES 6 campos ESTENDIDOS (Op9):
+  - "materiais_presentes": lista de materiais identificáveis
+  - "epi_observados": EPIs visíveis ou 'não observado'
+  - "pessoas_presentes": número + descrição ou 'nenhuma'
+  - "categoria_sugerida": UMA categoria entre: reporte_execucao | material | especificacao_tecnica | epi | seguranca | cronograma | pagamento | relacionamento | off_topic | ilegivel
+  - "categorias_secundarias": lista de categorias adicionais (ou [] vazio)
+  - "confidence": float 0.0-1.0
+
+# Exemplos de classificação correta (few-shot aprendidos do ground truth)
+
+Exemplo 1 — medição de tubo:
+Imagem: tubo metálico com fita métrica amarela mostrando 1,98m
+{"atividade_em_curso": "medição de altura de tubo de alambrado (aproximadamente 1,98m na fita)", "elementos_construtivos": "tubo metálico vertical, fita métrica amarela estendida", "condicoes_ambiente": "iluminação natural diurna", "observacoes_tecnicas": "verificação dimensional in-loco — altura conforme projeto", "categoria_sugerida": "reporte_execucao", "categorias_secundarias": ["especificacao_tecnica"], "confidence": 0.9}
+
+Exemplo 2 — estrutura montada (estado final):
+Imagem: estrutura metálica de telhado montada, sem trabalhadores visíveis
+{"atividade_em_curso": "estrutura metálica do telhado montada — etapa finalizada (tesouras e terças posicionadas)", "elementos_construtivos": "tesouras metálicas, terças, conectores soldados", "condicoes_ambiente": "canteiro externo, luz diurna", "observacoes_tecnicas": "estado final observável — estrutura aparenta estar posicionada no lugar definitivo", "categoria_sugerida": "reporte_execucao", "categorias_secundarias": [], "confidence": 0.85}
+
+Exemplo 3 — desenho técnico fotografado:
+Imagem: desenho técnico/projeto fotografado em papel
+{"atividade_em_curso": "desenho técnico do projeto fotografado", "elementos_construtivos": "planta/desenho mostrando telhado, alambrado, muro — especificação dimensional", "condicoes_ambiente": "foto de documento", "observacoes_tecnicas": "documento de especificação técnica, não canteiro em si", "categoria_sugerida": "especificacao_tecnica", "categorias_secundarias": [], "confidence": 0.9}
+
+Exemplo 4 — equipamento em feira (off-topic contextual):
+Imagem: equipamento de solda em estande de feira (não canteiro)
+{"atividade_em_curso": "equipamento em exposição comercial — não há atividade de canteiro", "elementos_construtivos": "máquinas de solda Vonder em estande", "condicoes_ambiente": "ambiente interno de exposição, iluminação artificial", "observacoes_tecnicas": "contexto extra-obra — possivelmente referência a equipamento oferecido em negociação comercial", "categoria_sugerida": "off_topic", "categorias_secundarias": [], "confidence": 0.9}
+
+Exemplo 5 — acidente contextual:
+Imagem: trator tombado em terreno, sem pessoas
+{"atividade_em_curso": "incidente — trator tombado", "elementos_construtivos": "trator de pequeno porte tombado", "condicoes_ambiente": "terreno externo", "observacoes_tecnicas": "acidente contextual, não atividade construtiva do nosso canteiro", "categoria_sugerida": "off_topic", "categorias_secundarias": [], "confidence": 0.8}
+
+Exemplo 6 — material presente sem atividade:
+Imagem: tubo e pilar metálico no solo (material presente sem atividade)
+{"atividade_em_curso": "material posicionado no canteiro aguardando uso", "elementos_construtivos": "tubo metálico, pilar metálico", "condicoes_ambiente": "canteiro, iluminação natural", "observacoes_tecnicas": "material de alambrado presente — preparativo para instalação", "categoria_sugerida": "material", "categorias_secundarias": [], "confidence": 0.85}
+
+# Regras críticas
+
+- Retorne JSON APENAS — sem markdown, sem comentários
+- Todos os 4 campos obrigatórios devem estar presentes e não-vazios
+- Se imagem é confusa/ruim, ainda tente extrair o que for observável (categoria_sugerida='ilegivel' se verdadeiramente irrecuperável)
+- Estado final (sem pessoas) NÃO é off_topic se o canteiro é o nosso — é reporte_execucao
+- Desenhos técnicos fotografados NÃO são off_topic — são especificacao_tecnica
+- Materiais sozinhos sem pessoas NÃO são off_topic — são material"""
+
+# Alias legivel + env override para feature flag
+VISION_PROMPT_VERSION: str = os.getenv("VISION_PROMPT_VERSION", "v2")
+
+SYSTEM_PROMPT = (
+    SYSTEM_PROMPT_V2 if VISION_PROMPT_VERSION == "v2" else SYSTEM_PROMPT_V1
 )
 
 USER_PROMPT = (
