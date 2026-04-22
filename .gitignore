@@ -47,3 +47,4 @@ logs/
 scratch/
 tmp/
 .env.*
+.env
