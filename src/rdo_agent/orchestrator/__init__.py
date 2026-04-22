@@ -75,6 +75,7 @@ class TaskType(str, Enum):
 
     # Sprint 4
     ENGINEER_SYNTHESIZE = "engineer_synthesize"
+    OCR_FIRST = "ocr_first"
 
 
 @dataclass
