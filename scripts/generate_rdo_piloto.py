@@ -350,6 +350,13 @@ def render_markdown(
         if primary:
             primary_counts[primary] = primary_counts.get(primary, 0) + 1
 
+    # Contagem por categoria TOTAL (inclui secundárias — reflete multi-label)
+    total_counts: dict[str, int] = {}
+    for r in rows:
+        cats = _parse_categories(r["categories"])
+        for cat in cats:
+            total_counts[cat] = total_counts.get(cat, 0) + 1
+
     lines: list[str] = []
     lines.append(f"# RDO — EE Santa Quitéria — {date}")
     lines.append("")
@@ -388,6 +395,20 @@ def render_markdown(
             continue
         if n:
             lines.append(f"- `{code}`: **{n}**")
+    lines.append("")
+
+    lines.append("**Por categoria (total — primary ou secundária):**")
+    ordered_total = [
+        (code, total_counts.get(code, 0))
+        for code, _ in CATEGORY_HEADERS
+    ] + [("ilegivel", total_counts.get("ilegivel", 0))]
+    for code, n in ordered_total:
+        if n == 0 and (modo_fiscal and code in FISCAL_EXCLUDED_CATEGORIES):
+            continue
+        if n:
+            delta = n - primary_counts.get(code, 0)
+            suffix = f" (+{delta} secundária)" if delta > 0 else ""
+            lines.append(f"- `{code}`: **{n}**{suffix}")
     lines.append("")
 
     for code, header in CATEGORY_HEADERS:

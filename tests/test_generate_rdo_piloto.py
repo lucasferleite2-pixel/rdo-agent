@@ -510,3 +510,36 @@ def test_resolve_display_fields_for_text_message():
     assert d["text"] == "manda a chave pix"
     assert d["date"] == "2026-04-08"
     assert d["source_kind"] == "texto"
+
+
+def test_summary_shows_total_counts_including_secondary(db, tmp_path):
+    """
+    Sprint 4 Op7: resumo inclui bloco 'Por categoria (total)' que conta
+    categoria secundária também. Valida que multi-label é refletido
+    numericamente no topo do RDO.
+    """
+    # 1 evento so negociacao
+    _insert_full_record(
+        db, idx=1, categories=["negociacao_comercial"],
+        ts_audio="2026-04-08T09:00:00Z",
+    )
+    # 2 eventos negociacao + pagamento (secundária)
+    _insert_full_record(
+        db, idx=2, categories=["negociacao_comercial", "pagamento"],
+        ts_audio="2026-04-08T10:00:00Z",
+    )
+    _insert_full_record(
+        db, idx=3, categories=["negociacao_comercial", "pagamento"],
+        ts_audio="2026-04-08T11:00:00Z",
+    )
+    result = rdo_piloto.generate_rdo(
+        db, obra="EVERALDO", date="2026-04-08",
+        output_dir=tmp_path / "reports",
+    )
+    md = result["markdown_path"].read_text(encoding="utf-8")
+
+    # Primary: negociacao=3, pagamento=0
+    assert "`negociacao_comercial`: **3**" in md
+    # Total: negociacao=3, pagamento=2 (as 2 secundárias)
+    assert "**Por categoria (total" in md
+    assert "`pagamento`: **2** (+2 secundária)" in md
