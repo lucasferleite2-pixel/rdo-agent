@@ -446,3 +446,31 @@ def test_api_key_missing_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "_settings", settings)
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY ausente"):
         _get_openai_client()
+
+
+# ---------------------------------------------------------------------------
+# Sprint 4 Op11 Divida #9 — timeout/retry nativos
+# ---------------------------------------------------------------------------
+
+
+def test_get_openai_client_has_timeout_configured(vaults_root):
+    """Cliente retornado tem timeout=30s e max_retries=3 (nativos do SDK)."""
+    from rdo_agent.ocr_extractor import (
+        OPENAI_CLIENT_MAX_RETRIES,
+        OPENAI_CLIENT_TIMEOUT_SEC,
+    )
+    # Constantes documentadas
+    assert OPENAI_CLIENT_TIMEOUT_SEC == 30.0
+    assert OPENAI_CLIENT_MAX_RETRIES == 3
+
+    client = _get_openai_client()
+    # SDK OpenAI expoe timeout como NotGiven / float / httpx.Timeout
+    # dependendo da versao. Se float, comparamos direto. Se objeto httpx,
+    # usa read attr. Cobre ambos.
+    t = client.timeout
+    try:
+        t_val = float(t)
+    except (TypeError, ValueError):
+        t_val = getattr(t, "read", None) or getattr(t, "connect", None)
+    assert t_val == 30.0, f"expected 30.0, got {t!r}"
+    assert client.max_retries == 3

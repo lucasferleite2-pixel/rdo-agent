@@ -228,38 +228,16 @@ def reprocess(
     return result
 
 
-def _apply_openai_timeout_patches(timeout_sec: float = 30.0) -> None:
-    """
-    Monkey-patch _get_openai_client dos modulos que rodam no worker
-    pra garantir timeout explicito. Resolve travamento observado em
-    producao onde SDK OpenAI faz retries com timeout default de 600s,
-    pendurando por minutos. Op9 nao toca em ocr_extractor/financial_ocr
-    (blacklist), entao patch acontece aqui ao nivel do script.
-
-    Config conservadora: timeout 30s + max_retries=0. Se alguma imagem
-    nao receber resposta em 30s, task vai pra FAILED e proxima roda.
-    Trade-off: algumas imagens podem falhar, mas evitamos travamento.
-    """
-    import rdo_agent.financial_ocr as fin_mod
-    import rdo_agent.ocr_extractor as ocr_mod
-    from rdo_agent.utils import config
-
-    def _patched_client():
-        key = config.get().openai_api_key
-        if not key:
-            raise RuntimeError("OPENAI_API_KEY ausente (config helper).")
-        from openai import OpenAI
-        return OpenAI(api_key=key, timeout=timeout_sec, max_retries=0)
-
-    ocr_mod._get_openai_client = _patched_client
-    fin_mod._get_openai_client = _patched_client
-
-
 def run_worker(
     conn: sqlite3.Connection, obra: str, limit: int | None = None,
 ) -> dict:
-    """Processa tasks OCR_FIRST pendentes enfileiradas pelo reprocess."""
-    _apply_openai_timeout_patches()
+    """
+    Processa tasks OCR_FIRST pendentes enfileiradas pelo reprocess.
+
+    Sprint 4 Op11 Divida #9 resolvida: o monkey-patch de timeout aqui
+    no script foi removido. `ocr_extractor._get_openai_client` agora
+    cria o OpenAI client com timeout=30s + max_retries=3 nativos.
+    """
     from rdo_agent.ocr_extractor import ocr_first_handler
 
     pending = conn.execute(

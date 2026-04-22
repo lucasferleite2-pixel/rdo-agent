@@ -120,6 +120,15 @@ def _now_iso_utc() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
+# Sprint 4 Op11 Divida #9 — timeout/retry nativos do SDK OpenAI.
+# Default 600s do SDK pendurava workers por 10 min em API degradada
+# (observado Op9 Fase 5). Valores calibrados: 30s por call (Vision
+# responde em 2-15s normal; 30s cobre p99 + ainda aborta rapido quando
+# degradado) + 3 retries automaticos pelo SDK pra transient errors.
+OPENAI_CLIENT_TIMEOUT_SEC: float = 30.0
+OPENAI_CLIENT_MAX_RETRIES: int = 3
+
+
 def _get_openai_client():
     key = config.get().openai_api_key
     if not key:
@@ -129,7 +138,11 @@ def _get_openai_client():
             "https://platform.openai.com/api-keys."
         )
     from openai import OpenAI
-    return OpenAI(api_key=key)
+    return OpenAI(
+        api_key=key,
+        timeout=OPENAI_CLIENT_TIMEOUT_SEC,
+        max_retries=OPENAI_CLIENT_MAX_RETRIES,
+    )
 
 
 def _guess_mime_type(path: Path) -> str:
