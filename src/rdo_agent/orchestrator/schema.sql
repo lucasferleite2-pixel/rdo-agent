@@ -360,3 +360,30 @@ CREATE TABLE IF NOT EXISTS financial_records (
 
 CREATE INDEX IF NOT EXISTS idx_financial_records_obra_data
     ON financial_records(obra, data_transacao);
+
+
+-- ---------------------------------------------------------------------------
+-- visual_analyses_archive — historico de analyses superseded por
+-- reprocessamentos (Sprint 4 Op9 pipeline OCR-first retroativo).
+--
+-- Mirror exato de visual_analyses + archived_at + archive_reason.
+-- Preserva forense: qualquer analise substituida continua auditavel
+-- pra prova de linhagem de dados.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS visual_analyses_archive (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_id     INTEGER,            -- id original de visual_analyses
+    obra            TEXT NOT NULL,
+    file_id         TEXT NOT NULL,
+    analysis_json   TEXT NOT NULL,
+    confidence      REAL,
+    api_call_id     INTEGER,
+    created_at      TEXT NOT NULL,      -- created_at original da analyse
+    archived_at     TEXT NOT NULL,      -- quando foi movida pra archive
+    archive_reason  TEXT                -- ex: 'superseded_by_ocr_first_retroactive_sprint4_op9'
+);
+
+CREATE INDEX IF NOT EXISTS idx_visual_analyses_archive_obra
+    ON visual_analyses_archive(obra, archived_at);
+CREATE INDEX IF NOT EXISTS idx_visual_analyses_archive_fileid
+    ON visual_analyses_archive(file_id);

@@ -146,6 +146,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     _migrate_api_calls_sprint2_phase2(conn)
     _migrate_classifications_sprint4(conn)
     _migrate_financial_records_sprint4_op8(conn)
+    _migrate_visual_analyses_archive_sprint4_op9(conn)
     conn.commit()
     return conn
 
@@ -236,6 +237,48 @@ def _migrate_financial_records_sprint4_op8(conn: sqlite3.Connection) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_financial_records_obra_data
                 ON financial_records(obra, data_transacao);
+            """
+        )
+
+
+def _migrate_visual_analyses_archive_sprint4_op9(conn: sqlite3.Connection) -> None:
+    """
+    Sprint 4 Op9 — cria tabela visual_analyses_archive se ausente.
+
+    Arquiva rows de `visual_analyses` superseded por reprocessamento
+    (ex: pipeline OCR-first retroativo Op9). Mirror do schema original
+    + `archived_at` e `archive_reason`. Preserva forense: qualquer
+    analise substituida continua auditavel pra prova de linhagem.
+
+    Idempotente: `CREATE TABLE IF NOT EXISTS` ja eh aplicado via
+    `executescript(schema.sql)` em init_db. Esta funcao existe como
+    ponto-de-extensao futuro + documentacao do invariante.
+    """
+    tables = {
+        row["name"]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    if "visual_analyses_archive" not in tables:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS visual_analyses_archive (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_id     INTEGER,
+                obra            TEXT NOT NULL,
+                file_id         TEXT NOT NULL,
+                analysis_json   TEXT NOT NULL,
+                confidence      REAL,
+                api_call_id     INTEGER,
+                created_at      TEXT NOT NULL,
+                archived_at     TEXT NOT NULL,
+                archive_reason  TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_visual_analyses_archive_obra
+                ON visual_analyses_archive(obra, archived_at);
+            CREATE INDEX IF NOT EXISTS idx_visual_analyses_archive_fileid
+                ON visual_analyses_archive(file_id);
             """
         )
 
