@@ -323,6 +323,94 @@ def _validate_response(parsed: dict) -> tuple[list[str], float, str]:
     return list(cats), conf_f, reasoning.strip()
 
 
+def _get_classification_text(
+    conn: sqlite3.Connection,
+    *,
+    obra: str,
+    source_type: str,
+    source_file_id: str | None,
+    source_message_id: str | None,
+) -> str:
+    """
+    Retorna o texto a ser classificado segundo o `source_type` da linha.
+
+    Sprint 3 (inicial): apenas 'transcription' (lia transcriptions.text).
+    Sprint 4 estende:
+      - 'text_message': le messages.content via source_message_id
+      - 'visual_analysis': concatena campos relevantes do analysis_json
+      - 'document': le documents.text via source_file_id
+
+    Levanta RuntimeError se a linha-fonte esperada nao existir, para que
+    handler superior converta em task FAILED com mensagem informativa.
+    """
+    if source_type == "text_message":
+        if not source_message_id:
+            raise RuntimeError(
+                "source_type='text_message' sem source_message_id"
+            )
+        m_row = conn.execute(
+            "SELECT content FROM messages WHERE obra = ? AND message_id = ?",
+            (obra, source_message_id),
+        ).fetchone()
+        if m_row is None:
+            raise RuntimeError(
+                f"message nao encontrada: obra={obra} "
+                f"message_id={source_message_id}"
+            )
+        return m_row[0] or ""
+
+    if source_type == "visual_analysis":
+        va_row = conn.execute(
+            "SELECT analysis_json FROM visual_analyses WHERE obra = ? "
+            "AND file_id = ?",
+            (obra, source_file_id),
+        ).fetchone()
+        if va_row is None:
+            raise RuntimeError(
+                f"visual_analysis nao encontrada para "
+                f"source_file_id={source_file_id}"
+            )
+        try:
+            analysis = json.loads(va_row[0])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError(
+                f"visual_analysis.analysis_json invalido para "
+                f"source_file_id={source_file_id}: {exc}"
+            ) from exc
+        parts: list[str] = []
+        for key in (
+            "atividade_em_curso",
+            "elementos_construtivos",
+            "observacoes_tecnicas",
+            "condicoes_ambiente",
+        ):
+            val = analysis.get(key)
+            if val:
+                parts.append(f"{key}: {val}")
+        return "\n".join(parts)
+
+    if source_type == "document":
+        d_row = conn.execute(
+            "SELECT text FROM documents WHERE obra = ? AND file_id = ?",
+            (obra, source_file_id),
+        ).fetchone()
+        if d_row is None:
+            raise RuntimeError(
+                f"document nao encontrado para source_file_id={source_file_id}"
+            )
+        return d_row[0] or ""
+
+    t_row = conn.execute(
+        "SELECT text FROM transcriptions WHERE obra = ? AND file_id = ?",
+        (obra, source_file_id),
+    ).fetchone()
+    if t_row is None:
+        raise RuntimeError(
+            f"transcription nao encontrada para source_file_id={source_file_id}"
+        )
+    return t_row[0] or ""
+
+
 def classify_text(
     conn: sqlite3.Connection,
     *,
@@ -367,8 +455,8 @@ def classify_handler(task: Task, conn: sqlite3.Connection) -> str | None:
         raise ValueError("payload sem classifications_id")
 
     row = conn.execute(
-        """SELECT id, source_file_id, semantic_status, human_corrected_text,
-                  human_reviewed
+        """SELECT id, source_file_id, source_type, source_message_id,
+                  semantic_status, human_corrected_text, human_reviewed
            FROM classifications WHERE obra = ? AND id = ?""",
         (task.obra, classifications_id),
     ).fetchone()
@@ -380,8 +468,10 @@ def classify_handler(task: Task, conn: sqlite3.Connection) -> str | None:
 
     cls_id = row[0]
     source_file_id = row[1]
-    status = row[2]
-    human_corrected = row[3]
+    source_type = row[2] or "transcription"
+    source_message_id = row[3]
+    status = row[4]
+    human_corrected = row[5]
 
     if status == "rejected":
         log.info(
@@ -398,15 +488,11 @@ def classify_handler(task: Task, conn: sqlite3.Connection) -> str | None:
     if human_corrected:
         text = human_corrected
     else:
-        t_row = conn.execute(
-            "SELECT text FROM transcriptions WHERE obra = ? AND file_id = ?",
-            (task.obra, source_file_id),
-        ).fetchone()
-        if t_row is None:
-            raise RuntimeError(
-                f"transcription nao encontrada para source_file_id={source_file_id}"
-            )
-        text = t_row[0] or ""
+        text = _get_classification_text(
+            conn, obra=task.obra, source_type=source_type,
+            source_file_id=source_file_id,
+            source_message_id=source_message_id,
+        )
 
     result = classify_text(conn, obra=task.obra, text=text)
 

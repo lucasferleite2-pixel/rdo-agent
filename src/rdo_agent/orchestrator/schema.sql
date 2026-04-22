@@ -303,7 +303,12 @@ CREATE TABLE IF NOT EXISTS classifications (
     created_at              TEXT NOT NULL,
     updated_at              TEXT,
 
+    -- Sprint 4 Op1: referencia mensagem de texto puro quando source_type=
+    -- 'text_message'. NULL para outros source_types.
+    source_message_id       TEXT,
+
     FOREIGN KEY (source_file_id)         REFERENCES files(file_id),
+    FOREIGN KEY (source_message_id)      REFERENCES messages(message_id),
     FOREIGN KEY (quality_api_call_id)    REFERENCES api_calls(id),
     FOREIGN KEY (classifier_api_call_id) REFERENCES api_calls(id),
     UNIQUE (obra, source_file_id)

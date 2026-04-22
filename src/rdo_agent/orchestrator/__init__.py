@@ -143,6 +143,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
 
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
     _migrate_api_calls_sprint2_phase2(conn)
+    _migrate_classifications_sprint4(conn)
     conn.commit()
     return conn
 
@@ -163,6 +164,21 @@ def _migrate_api_calls_sprint2_phase2(conn: sqlite3.Connection) -> None:
     ):
         if col_name not in existing:
             conn.execute(f"ALTER TABLE api_calls ADD COLUMN {col_name} {col_def}")
+
+
+def _migrate_classifications_sprint4(conn: sqlite3.Connection) -> None:
+    """
+    Sprint 4 Op1 — adiciona source_message_id à tabela classifications.
+
+    Permite rastrear mensagens de texto puro WhatsApp (sem anexo) como
+    fonte semantica, alem dos derivados de arquivos (transcricoes,
+    visual_analyses, documents). Ver ADR-003 (pendente) para contexto.
+
+    Idempotente: PRAGMA table_info + ALTER TABLE so se ausente.
+    """
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(classifications)")}
+    if "source_message_id" not in existing:
+        conn.execute("ALTER TABLE classifications ADD COLUMN source_message_id TEXT")
 
 
 def enqueue(conn: sqlite3.Connection, task: Task) -> int:
