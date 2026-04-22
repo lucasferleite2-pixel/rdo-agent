@@ -190,6 +190,65 @@ CREATE VIEW IF NOT EXISTS visual_analyses_active AS
 
 
 -- ---------------------------------------------------------------------------
+-- Sprint 5 Fase A — narrativas forenses geradas por agente Sonnet 4.6
+--
+-- Cada row representa uma narrativa produzida sobre:
+--   - scope='day' + scope_ref=YYYY-MM-DD: narrativa do dia
+--   - scope='obra_overview' + scope_ref=NULL: narrativa da obra inteira
+--
+-- UNIQUE (obra, scope, scope_ref, dossier_hash) eh cache key — mesmo
+-- dossier gera a mesma narrativa, evita regeneracao cara.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS forensic_narratives (
+    id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+    obra                       TEXT NOT NULL,
+    scope                      TEXT NOT NULL
+                               CHECK (scope IN ('day', 'obra_overview')),
+    scope_ref                  TEXT,
+    narrative_text             TEXT NOT NULL,
+    dossier_hash               TEXT NOT NULL,
+    model_used                 TEXT NOT NULL,
+    prompt_version             TEXT NOT NULL,
+    api_call_id                INTEGER,
+    events_count               INTEGER,
+    confidence                 REAL,
+    validation_checklist_json  TEXT,
+    created_at                 TEXT NOT NULL,
+    FOREIGN KEY (api_call_id) REFERENCES api_calls(id),
+    UNIQUE (obra, scope, scope_ref, dossier_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_narratives_obra_scope
+    ON forensic_narratives(obra, scope, scope_ref);
+
+
+-- ---------------------------------------------------------------------------
+-- Sprint 5 Fase B (ESQUELETO — implementacao na proxima sessao)
+--
+-- Correlacoes sao relacoes temporais/semanticas detectadas entre eventos
+-- (ex: pedido de PIX seguido de transferencia real <30min). Nesta sessao,
+-- apenas o schema esta pronto — detectores virao em Fase B.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS correlations (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    obra                  TEXT NOT NULL,
+    correlation_type      TEXT NOT NULL,
+    primary_event_ref     TEXT NOT NULL,
+    primary_event_source  TEXT NOT NULL,
+    related_event_ref     TEXT NOT NULL,
+    related_event_source  TEXT NOT NULL,
+    time_gap_seconds      INTEGER,
+    confidence            REAL,
+    rationale             TEXT,
+    detected_by           TEXT,
+    created_at            TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_correlations_obra
+    ON correlations(obra, correlation_type);
+
+
+-- ---------------------------------------------------------------------------
 -- documents — texto extraído de PDFs e similares (Sprint 2 §Fase 1)
 --
 -- ADICIONADA EM SPRINT 2: reconhecimento explícito de necessidade não prevista

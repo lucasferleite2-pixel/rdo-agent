@@ -148,6 +148,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     _migrate_financial_records_sprint4_op8(conn)
     _migrate_visual_analyses_archive_sprint4_op9(conn)
     _migrate_superseded_by_sprint4_op11(conn)
+    _migrate_sprint5_fase_a_b(conn)
     conn.commit()
     return conn
 
@@ -310,6 +311,74 @@ def _migrate_superseded_by_sprint4_op11(conn: sqlite3.Connection) -> None:
     if "superseded_at" not in existing:
         conn.execute(
             "ALTER TABLE visual_analyses ADD COLUMN superseded_at TEXT"
+        )
+
+
+def _migrate_sprint5_fase_a_b(conn: sqlite3.Connection) -> None:
+    """
+    Sprint 5 Fase A/B — cria tabelas forensic_narratives + correlations.
+
+    Fase A: forensic_narratives armazena narrativas geradas pelo agente
+    forense (Sonnet 4.6) sobre dossiers cronologicos de obras/dias.
+    UNIQUE(obra, scope, scope_ref, dossier_hash) funciona como cache key.
+
+    Fase B: correlations (esqueleto — detectores virão em sessao futura)
+    guarda relacoes temporais/semanticas entre eventos.
+
+    Idempotente: CREATE TABLE IF NOT EXISTS ja eh aplicado via schema.sql;
+    funcao existe como ponto-de-extensao e documentacao do invariante.
+    """
+    tables = {
+        row["name"]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    if "forensic_narratives" not in tables:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS forensic_narratives (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                obra TEXT NOT NULL,
+                scope TEXT NOT NULL
+                    CHECK (scope IN ('day', 'obra_overview')),
+                scope_ref TEXT,
+                narrative_text TEXT NOT NULL,
+                dossier_hash TEXT NOT NULL,
+                model_used TEXT NOT NULL,
+                prompt_version TEXT NOT NULL,
+                api_call_id INTEGER,
+                events_count INTEGER,
+                confidence REAL,
+                validation_checklist_json TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (api_call_id) REFERENCES api_calls(id),
+                UNIQUE (obra, scope, scope_ref, dossier_hash)
+            );
+            CREATE INDEX IF NOT EXISTS idx_narratives_obra_scope
+                ON forensic_narratives(obra, scope, scope_ref);
+            """
+        )
+    if "correlations" not in tables:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS correlations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                obra TEXT NOT NULL,
+                correlation_type TEXT NOT NULL,
+                primary_event_ref TEXT NOT NULL,
+                primary_event_source TEXT NOT NULL,
+                related_event_ref TEXT NOT NULL,
+                related_event_source TEXT NOT NULL,
+                time_gap_seconds INTEGER,
+                confidence REAL,
+                rationale TEXT,
+                detected_by TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_correlations_obra
+                ON correlations(obra, correlation_type);
+            """
         )
 
 
