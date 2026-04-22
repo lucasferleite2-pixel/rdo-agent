@@ -284,6 +284,88 @@ def _group_by_all_categories(
     return by
 
 
+# ---------------------------------------------------------------------------
+# Sprint 4 Op10 — integracao financial_records (ledger de comprovantes PIX)
+# ---------------------------------------------------------------------------
+
+
+def _fetch_financial_records_for_date(
+    conn: sqlite3.Connection, obra: str, date_str: str,
+) -> list[sqlite3.Row]:
+    """
+    Retorna comprovantes financeiros (PIX/TED/boleto etc) da obra na data.
+    Ordenados por hora_transacao (asc). Formato ISO YYYY-MM-DD em date_str.
+
+    Data coluna eh `data_transacao` extraida pelo financial_ocr (Op8).
+    """
+    cur = conn.execute(
+        """
+        SELECT data_transacao, hora_transacao, valor_centavos, doc_type,
+               pagador_nome, recebedor_nome, descricao, confidence,
+               source_file_id
+        FROM financial_records
+        WHERE obra = ? AND data_transacao = ?
+        ORDER BY hora_transacao
+        """,
+        (obra, date_str),
+    )
+    return list(cur.fetchall())
+
+
+def _format_brl(cents: int | None) -> str:
+    """Formata centavos em R$ X.XXX,XX (padrao brasileiro)."""
+    if cents is None:
+        return "n/a"
+    reais = abs(cents) // 100
+    centavos = abs(cents) % 100
+    signal = "-" if cents < 0 else ""
+    reais_str = f"{reais:,}".replace(",", ".")
+    return f"{signal}R$ {reais_str},{centavos:02d}"
+
+
+def _truncate(s: str | None, maxlen: int = 40) -> str:
+    if not s:
+        return "—"
+    s = s.strip()
+    if len(s) <= maxlen:
+        return s
+    return s[: maxlen - 1] + "…"
+
+
+def _render_financial_section(
+    records: list[sqlite3.Row],
+) -> list[str]:
+    """
+    Renderiza seção markdown de pagamentos registrados.
+    Se lista vazia, retorna lista vazia (secao eh omitida pelo caller).
+    """
+    if not records:
+        return []
+    lines: list[str] = []
+    lines.append("## 💰 Pagamentos registrados (comprovantes)")
+    lines.append("")
+    lines.append("| Hora | Valor | Tipo | De → Para | Descrição |")
+    lines.append("|---|---:|:---:|---|---|")
+    total_cents = 0
+    for r in records:
+        hora = r["hora_transacao"] or "--:--"
+        # Remove segundos pra economizar espaço (HH:MM:SS -> HH:MM)
+        if isinstance(hora, str) and len(hora) >= 5:
+            hora = hora[:5]
+        valor = _format_brl(r["valor_centavos"])
+        total_cents += r["valor_centavos"] or 0
+        tipo = (r["doc_type"] or "outro").upper()
+        pagador = _truncate(r["pagador_nome"], 28)
+        recebedor = _truncate(r["recebedor_nome"], 28)
+        de_para = f"{pagador} → {recebedor}"
+        desc = _truncate(r["descricao"], 50)
+        lines.append(f"| {hora} | {valor} | {tipo} | {de_para} | {desc} |")
+    lines.append("")
+    lines.append(f"**Total do dia:** {_format_brl(total_cents)}")
+    lines.append("")
+    return lines
+
+
 def _format_item_line(
     row: sqlite3.Row,
     *,
@@ -322,6 +404,7 @@ def _format_item_line(
 def render_markdown(
     obra: str, date: str, rows: list[sqlite3.Row],
     *, modo_fiscal: bool = False,
+    financial_records: list[sqlite3.Row] | None = None,
 ) -> str:
     """
     Renderiza RDO em markdown.
@@ -332,6 +415,11 @@ def render_markdown(
       - --modo-fiscal: omite secao off_topic (eventos so-contratuais)
       - Resumo numerico por categoria no topo
       - Tags de source por evento ([AUDIO]/[TEXTO]/[IMAGEM]/[VIDEO-FRAME]/[PDF])
+
+    Sprint 4 Op10 extensao:
+      - financial_records: se fornecido e nao-vazio, seção "Pagamentos
+        registrados (comprovantes)" eh inserida apos o resumo com
+        ledger tabular de PIX/TED/boleto. Seção omitida se vazia.
     """
     by_cat = _group_by_all_categories(rows)
     total = len(rows)
@@ -410,6 +498,11 @@ def render_markdown(
             suffix = f" (+{delta} secundária)" if delta > 0 else ""
             lines.append(f"- `{code}`: **{n}**{suffix}")
     lines.append("")
+
+    # Sprint 4 Op10: ledger financeiro (logo apos resumo, antes das
+    # categorias semanticas) — so aparece se houver comprovantes no dia
+    if financial_records:
+        lines.extend(_render_financial_section(financial_records))
 
     for code, header in CATEGORY_HEADERS:
         if modo_fiscal and code in FISCAL_EXCLUDED_CATEGORIES:
@@ -597,12 +690,17 @@ def generate_rdo(
         raise RuntimeError(
             f"Nenhuma classification classificada para obra={obra} data={date}"
         )
+    # Op10: busca tambem comprovantes financeiros da data (pode ser vazio)
+    financial_records = _fetch_financial_records_for_date(conn, obra, date)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     suffix = "_fiscal" if modo_fiscal else ""
     base = f"rdo_piloto_{obra}_{date}{suffix}"
     md_path = output_dir / f"{base}.md"
-    md_text = render_markdown(obra, date, rows, modo_fiscal=modo_fiscal)
+    md_text = render_markdown(
+        obra, date, rows, modo_fiscal=modo_fiscal,
+        financial_records=financial_records,
+    )
     md_path.write_text(md_text, encoding="utf-8")
 
     pdf_path: Path | None = output_dir / f"{base}.pdf"
