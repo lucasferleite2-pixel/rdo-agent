@@ -651,7 +651,7 @@ def visual_analysis_handler(task: Task, conn: sqlite3.Connection) -> str | None:
         "SELECT 1 FROM visual_analyses WHERE file_id = ?", (json_file_id,),
     ).fetchone()
     if existing is None:
-        conn.execute(
+        cur = conn.execute(
             """
             INSERT INTO visual_analyses (
                 obra, file_id, analysis_json, confidence, api_call_id, created_at
@@ -665,6 +665,25 @@ def visual_analysis_handler(task: Task, conn: sqlite3.Connection) -> str | None:
                 api_call_id,
                 now,
             ),
+        )
+        new_va_id = cur.lastrowid
+
+        # Sprint 4 Op11 Divida #10 — archive move-style:
+        # marca rows antigas da mesma imagem-fonte como superseded.
+        # Identifica via derived_from=image_file_id (JSONs irmaos
+        # derivados da mesma imagem).
+        conn.execute(
+            """
+            UPDATE visual_analyses
+            SET superseded_by = ?, superseded_at = ?
+            WHERE obra = ?
+              AND id != ?
+              AND superseded_by IS NULL
+              AND file_id IN (
+                  SELECT file_id FROM files WHERE derived_from = ?
+              )
+            """,
+            (new_va_id, now, obra, new_va_id, image_file_id),
         )
 
     conn.execute(

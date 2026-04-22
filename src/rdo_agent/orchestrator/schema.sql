@@ -174,6 +174,20 @@ CREATE TABLE IF NOT EXISTS visual_analyses (
 
 CREATE INDEX IF NOT EXISTS idx_visual_file ON visual_analyses(file_id);
 
+-- ---------------------------------------------------------------------------
+-- Sprint 4 Op11 Divida #10 — archive move-style
+-- superseded_by aponta para a nova row em visual_analyses que substituiu
+-- esta (ex: reprocessamento retroativo OCR-first). superseded_at registra
+-- quando ocorreu a substituicao. Rows ativas: superseded_by IS NULL.
+-- ---------------------------------------------------------------------------
+-- Colunas adicionadas via _migrate_superseded_by_sprint4_op11 em init_db
+-- (ALTER TABLE idempotente via PRAGMA table_info).
+
+-- View helper pra consumer queries (semantic_classifier, RDO etc) —
+-- so retorna rows ativas, escondendo versoes antigas.
+CREATE VIEW IF NOT EXISTS visual_analyses_active AS
+    SELECT * FROM visual_analyses WHERE superseded_by IS NULL;
+
 
 -- ---------------------------------------------------------------------------
 -- documents — texto extraído de PDFs e similares (Sprint 2 §Fase 1)

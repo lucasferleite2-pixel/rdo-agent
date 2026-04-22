@@ -147,6 +147,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     _migrate_classifications_sprint4(conn)
     _migrate_financial_records_sprint4_op8(conn)
     _migrate_visual_analyses_archive_sprint4_op9(conn)
+    _migrate_superseded_by_sprint4_op11(conn)
     conn.commit()
     return conn
 
@@ -280,6 +281,35 @@ def _migrate_visual_analyses_archive_sprint4_op9(conn: sqlite3.Connection) -> No
             CREATE INDEX IF NOT EXISTS idx_visual_analyses_archive_fileid
                 ON visual_analyses_archive(file_id);
             """
+        )
+
+
+def _migrate_superseded_by_sprint4_op11(conn: sqlite3.Connection) -> None:
+    """
+    Sprint 4 Op11 Divida #10 — archive move-style via superseded_by.
+
+    Adiciona 2 colunas a visual_analyses:
+      - superseded_by INTEGER: id da nova row que substituiu esta
+        (NULL = row ativa)
+      - superseded_at TEXT: ISO timestamp da substituicao
+
+    Rows ativas: `WHERE superseded_by IS NULL`. A view
+    `visual_analyses_active` (criada em schema.sql) encapsula isso.
+
+    Idempotente: PRAGMA table_info + ALTER TABLE so se colunas ausentes.
+    View ja eh CREATE VIEW IF NOT EXISTS via executescript.
+    """
+    existing = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(visual_analyses)")
+    }
+    if "superseded_by" not in existing:
+        conn.execute(
+            "ALTER TABLE visual_analyses ADD COLUMN superseded_by INTEGER"
+        )
+    if "superseded_at" not in existing:
+        conn.execute(
+            "ALTER TABLE visual_analyses ADD COLUMN superseded_at TEXT"
         )
 
 
