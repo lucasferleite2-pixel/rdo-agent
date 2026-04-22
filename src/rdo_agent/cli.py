@@ -15,13 +15,16 @@ import signal
 import sqlite3
 import sys
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.progress import (
-    BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn,
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
 )
 from rich.table import Table
 
@@ -225,7 +228,10 @@ def _process_with_progress(
     import traceback
 
     from rdo_agent.orchestrator import (
-        init_db, mark_done, mark_failed, mark_running,
+        init_db,
+        mark_done,
+        mark_failed,
+        mark_running,
     )
 
     state = {"interrupted": False}
@@ -368,7 +374,7 @@ def _new_task(
 @click.option(
     "--task-type",
     type=click.Choice(
-        ["extract_audio", "extract_document", "transcribe", "visual_analysis", "detect_quality"],
+        ["extract_audio", "extract_document", "transcribe", "visual_analysis", "detect_quality", "ocr_first"],
         case_sensitive=False,
     ),
     default=None,
@@ -397,6 +403,7 @@ def process(obra, task_type, limit, dry_run, throttle):
     from rdo_agent.classifier.quality_detector import detect_quality_handler
     from rdo_agent.document_extractor import extract_document_handler
     from rdo_agent.extractor import extract_audio_handler
+    from rdo_agent.ocr_extractor import ocr_first_handler
     from rdo_agent.orchestrator import TaskType
     from rdo_agent.transcriber import transcribe_handler
     from rdo_agent.visual_analyzer import visual_analysis_handler
@@ -407,6 +414,7 @@ def process(obra, task_type, limit, dry_run, throttle):
         TaskType.TRANSCRIBE: transcribe_handler,
         TaskType.VISUAL_ANALYSIS: visual_analysis_handler,
         TaskType.DETECT_QUALITY: detect_quality_handler,
+        TaskType.OCR_FIRST: ocr_first_handler,
     }
 
     task_type_norm = task_type.lower() if task_type else None
@@ -568,6 +576,93 @@ def detect_quality_cmd(obra: str, limit: int | None, throttle: float) -> None:
     )
 
     summary = Table(title="Resumo detect-quality", show_header=False)
+    summary.add_column("metrica", style="cyan", no_wrap=True)
+    summary.add_column("valor", style="bold")
+    summary.add_row("done", f"[green]{done}[/green]")
+    summary.add_row("failed", f"[red]{failed}[/red]" if failed else "0")
+    summary.add_row("custo", f"[green]US$ {cost_usd:.4f}[/green]")
+    summary.add_row("latencia media", f"{avg_lat_ms / 1000.0:.2f}s")
+    console.print("")
+    console.print(summary)
+    if interrupted:
+        sys.exit(130)
+    if failed > 0:
+        sys.exit(1)
+
+
+@main.command(name="ocr-images")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option("--limit", type=int, default=None, help="Maximo de imagens a enfileirar")
+@click.option("--throttle", type=float, default=0.3, help="Pausa entre tasks (s)")
+def ocr_images_cmd(obra: str, limit: int | None, throttle: float) -> None:
+    """Enfileira e executa pipeline OCR-first em imagens originais (Sprint 4 Op8).
+
+    Lista imagens com file_type='image' e derived_from IS NULL (imagens
+    originais, nao frames extraidos de video) que ainda nao tenham sido
+    processadas por OCR_FIRST. Para cada, enfileira task OCR_FIRST e
+    roda worker com handler apropriado.
+    """
+    from rdo_agent.ocr_extractor import ocr_first_handler
+    from rdo_agent.orchestrator import TaskType, init_db
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = init_db(vault_path)
+    # Imagens originais (nao derived — exclui frames de video) sem
+    # task OCR_FIRST done/running/pending. Usa LEFT JOIN em tasks
+    # via json_extract no payload.
+    rows = conn.execute(
+        """
+        SELECT f.file_id, f.file_path FROM files f
+        WHERE f.obra = ?
+          AND f.file_type = 'image'
+          AND f.derived_from IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM tasks t
+              WHERE t.obra = f.obra
+                AND t.task_type = 'ocr_first'
+                AND t.status IN ('pending', 'running', 'done')
+                AND json_extract(t.payload, '$.file_id') = f.file_id
+          )
+        ORDER BY f.timestamp_resolved
+        """,
+        (obra,),
+    ).fetchall()
+    targets = list(rows)
+    if limit:
+        targets = targets[:limit]
+
+    console.print(f"[bold cyan]OCR-images:[/bold cyan] {obra}")
+    console.print(
+        f"[bold cyan]Imagens originais sem OCR_FIRST:[/bold cyan] {len(targets)}"
+    )
+    if not targets:
+        console.print("[yellow]Nenhuma imagem pendente.[/yellow]")
+        conn.close()
+        return
+
+    enqueued = 0
+    for r in targets:
+        _new_task(
+            conn, task_type=TaskType.OCR_FIRST,
+            payload={"file_id": r["file_id"], "file_path": r["file_path"]},
+            obra=obra,
+        )
+        enqueued += 1
+    conn.close()
+    console.print(f"[green]+[/green] {enqueued} task(s) enfileiradas")
+
+    handlers_map = {TaskType.OCR_FIRST: ocr_first_handler}
+    done, failed, cost_usd, avg_lat_ms, interrupted = _process_with_progress(
+        vault_path=vault_path, obra=obra, handlers=handlers_map,
+        task_type_filter="ocr_first", limit=limit, throttle=throttle,
+    )
+
+    summary = Table(title="Resumo ocr-images", show_header=False)
     summary.add_column("metrica", style="cyan", no_wrap=True)
     summary.add_column("valor", style="bold")
     summary.add_row("done", f"[green]{done}[/green]")
