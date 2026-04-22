@@ -486,11 +486,37 @@ def _result_from_sentinel(sentinel: dict, cost_usd: float) -> OCRResult:
 # ---------------------------------------------------------------------------
 
 
+def _is_video_frame(conn: sqlite3.Connection, file_id: str) -> bool:
+    """
+    Sprint 4 Op11 Divida #11 — True se `file_id` eh frame extraido de
+    video.
+
+    Heuristica: segue `files.derived_from` e checa se o parent tem
+    `file_type='video'`. Frames tipicamente nao contem texto e chamar
+    OCR neles eh desperdicio — economiza ~R\\$ 0.005/frame em vaults
+    com muitos videos.
+    """
+    row = conn.execute(
+        """
+        SELECT parent.file_type
+        FROM files f
+        LEFT JOIN files parent ON parent.file_id = f.derived_from
+        WHERE f.file_id = ?
+        """,
+        (file_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    return (row["file_type"] or "").lower() == "video"
+
+
 def ocr_first_handler(task: Task, conn: sqlite3.Connection) -> str | None:
     """
     Handler principal do pipeline OCR-first.
 
     Fluxo:
+      0. (Op11 #11) Se imagem eh frame de video, PULA OCR e enfileira
+         VISUAL_ANALYSIS direto — economia de calls gpt-4o-mini.
       1. Le imagem de task.payload['file_id'] + 'file_path'
       2. Roda OCR (extract_text_from_image)
       3. Decide rota:
@@ -521,6 +547,24 @@ def ocr_first_handler(task: Task, conn: sqlite3.Connection) -> str | None:
     image_rel_path = payload["file_path"]
 
     obra = task.obra
+
+    # Op11 #11 — frames de video pulam OCR: enfileira VA direto.
+    if _is_video_frame(conn, image_file_id):
+        enqueue(
+            conn,
+            Task(
+                id=None, task_type=TaskType.VISUAL_ANALYSIS,
+                payload={
+                    "file_id": image_file_id,
+                    "file_path": image_rel_path,
+                },
+                status=TaskStatus.PENDING, depends_on=[],
+                obra=obra, created_at="", priority=5,
+            ),
+        )
+        conn.commit()
+        return "routed:visual_analysis (skipped_ocr:video_frame)"
+
     vault_path = config.get().vault_path(obra)
     image_path = vault_path / image_rel_path
 

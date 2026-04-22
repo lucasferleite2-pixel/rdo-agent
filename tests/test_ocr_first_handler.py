@@ -398,6 +398,103 @@ def test_low_confidence_ocr_marks_review_needed(seeded_vault, monkeypatch):
     assert cls_row["semantic_status"] == "pending_review"
 
 
+def test_video_frame_skips_ocr_and_routes_to_visual_analysis(
+    seeded_vault, monkeypatch,
+):
+    """
+    Sprint 4 Op11 Divida #11: frame extraido de video pula OCR e vai
+    direto para VISUAL_ANALYSIS (economia de call gpt-4o-mini).
+    """
+    conn = seeded_vault["conn"]
+    obra = seeded_vault["obra"]
+
+    # Insere video + frame derivado (substitui a imagem original do fixture)
+    conn.execute(
+        """INSERT INTO files (file_id, obra, file_path, file_type,
+        sha256, size_bytes, semantic_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        ("f_video_src", obra, "10_media/video.mp4", "video",
+         "v"*64, 10000, "done", "2026-04-20T00:00:00Z"),
+    )
+    # Frame derivado do video (com mesmo image_file_id do fixture)
+    # Sobrescreve derived_from pra apontar pra video
+    conn.execute(
+        "UPDATE files SET derived_from='f_video_src', "
+        "derivation_method='ffmpeg_extract_frame_p050' WHERE file_id=?",
+        (seeded_vault["image_file_id"],),
+    )
+    conn.commit()
+
+    # Mock OCR client — NAO deve ser chamado
+    fake = _FakeClient([])
+    monkeypatch.setattr(ocr_extractor, "_get_openai_client", lambda: fake)
+
+    result = ocr_first_handler(_make_task(seeded_vault), conn)
+
+    assert "skipped_ocr:video_frame" in result
+    # Nenhuma chamada API feita
+    assert len(fake.chat.completions.calls) == 0
+
+    # VA task enfileirada
+    va_count = conn.execute(
+        "SELECT COUNT(*) FROM tasks WHERE task_type='visual_analysis'"
+    ).fetchone()[0]
+    assert va_count == 1
+
+    # Nenhum document criado
+    doc_count = conn.execute(
+        "SELECT COUNT(*) FROM documents"
+    ).fetchone()[0]
+    assert doc_count == 0
+
+
+def test_original_image_still_uses_ocr(seeded_vault, monkeypatch):
+    """
+    Sprint 4 Op11 Divida #11: imagem ORIGINAL (derived_from=NULL)
+    continua chamando OCR normalmente — so frames pulam.
+    """
+    # Fixture default ja tem imagem sem derived_from.
+    # Verifica que OCR ainda eh chamado.
+    _install_ocr_fake(monkeypatch, _ocr_payload(
+        text="OFICIO texto " * 20, word_count=40,
+        is_document=True, doc_type_hint="outro",
+    ))
+    result = ocr_first_handler(_make_task(seeded_vault), seeded_vault["conn"])
+    # Rota DOC (OCR foi chamado)
+    assert result.startswith("routed:document")
+
+
+def test_helper_is_video_frame_true_when_parent_video(seeded_vault):
+    """Unit test do helper _is_video_frame."""
+    conn = seeded_vault["conn"]
+    obra = seeded_vault["obra"]
+    conn.execute(
+        """INSERT INTO files (file_id, obra, file_path, file_type,
+        sha256, size_bytes, semantic_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        ("f_vid", obra, "10_media/v.mp4", "video", "v"*64, 1000,
+         "done", "2026-04-20T00:00:00Z"),
+    )
+    conn.execute(
+        """INSERT INTO files (file_id, obra, file_path, file_type,
+        sha256, size_bytes, derived_from, derivation_method,
+        semantic_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        ("f_frame", obra, "10_media/frame.jpg", "image", "f"*64, 100,
+         "f_vid", "ffmpeg_extract_frame_p050", "done",
+         "2026-04-20T00:00:00Z"),
+    )
+    conn.commit()
+
+    assert ocr_extractor._is_video_frame(conn, "f_frame") is True
+    # Imagem original (derived_from=NULL) -> False
+    assert ocr_extractor._is_video_frame(
+        conn, seeded_vault["image_file_id"],
+    ) is False
+    # file_id inexistente -> False (defensive)
+    assert ocr_extractor._is_video_frame(conn, "f_inexistente") is False
+
+
 def test_source_image_status_updated_on_doc_route(seeded_vault, monkeypatch):
     """Imagem-fonte recebe semantic_status='ocr_extracted' apos DOC route."""
     _install_ocr_fake(monkeypatch, _ocr_payload(
