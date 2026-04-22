@@ -42,9 +42,9 @@ from pathlib import Path
 
 ARCHIVE_REASON = "superseded_by_ocr_first_retroactive_sprint4_op9"
 
-# Gate de custo — abort soft se ultrapassar. Budget desta fase ~$0.30;
-# seguranca contra loops.
-COST_BUDGET_USD = 0.60
+# Gate de custo DELTA desta execucao (nao absoluto da vault).
+# Budget desta fase ~$0.30; margem ate $0.50. Seguranca contra loops.
+COST_BUDGET_DELTA_USD = 0.50
 
 
 def _now_iso_utc() -> str:
@@ -112,14 +112,21 @@ def _archive_row(
 def _enqueue_ocr_first_task(
     conn: sqlite3.Connection, obra: str, source_fid: str, source_path: str,
 ) -> int:
-    """Enfileira OCR_FIRST task se nao estiver pending/running/done."""
+    """
+    Enfileira OCR_FIRST task pra reprocessamento.
+
+    Bloqueia se ja existe task pending/running (evita corrida).
+    Tasks 'done' (de execucao anterior — ex: Op8) NAO bloqueiam —
+    reprocessamento retroativo Op9 quer rodar dispositivos novamente
+    com prompt V2. Gera nova task id (versao n+1).
+    """
     from rdo_agent.orchestrator import Task, TaskStatus, TaskType, enqueue
 
     existing = conn.execute(
         """SELECT id FROM tasks
            WHERE obra=? AND task_type='ocr_first'
              AND json_extract(payload, '$.file_id') = ?
-             AND status IN ('pending', 'running', 'done')""",
+             AND status IN ('pending', 'running')""",
         (obra, source_fid),
     ).fetchone()
     if existing:
@@ -187,12 +194,13 @@ def reprocess(
         if dry_run:
             continue
 
-        # Cost gate — abort gracefully
+        # Cost gate — delta relativo ao inicio da execucao
         current_cost = _get_cumulative_cost(conn, obra)
-        if current_cost > COST_BUDGET_USD:
+        delta_cost = current_cost - cost_before
+        if delta_cost > COST_BUDGET_DELTA_USD:
             result["errors"].append(
-                f"COST_BUDGET_EXCEEDED: current={current_cost:.4f} "
-                f"budget={COST_BUDGET_USD}"
+                f"COST_BUDGET_EXCEEDED: delta={delta_cost:.4f} "
+                f"budget_delta={COST_BUDGET_DELTA_USD}"
             )
             break
 
@@ -220,10 +228,38 @@ def reprocess(
     return result
 
 
+def _apply_openai_timeout_patches(timeout_sec: float = 30.0) -> None:
+    """
+    Monkey-patch _get_openai_client dos modulos que rodam no worker
+    pra garantir timeout explicito. Resolve travamento observado em
+    producao onde SDK OpenAI faz retries com timeout default de 600s,
+    pendurando por minutos. Op9 nao toca em ocr_extractor/financial_ocr
+    (blacklist), entao patch acontece aqui ao nivel do script.
+
+    Config conservadora: timeout 30s + max_retries=0. Se alguma imagem
+    nao receber resposta em 30s, task vai pra FAILED e proxima roda.
+    Trade-off: algumas imagens podem falhar, mas evitamos travamento.
+    """
+    import rdo_agent.financial_ocr as fin_mod
+    import rdo_agent.ocr_extractor as ocr_mod
+    from rdo_agent.utils import config
+
+    def _patched_client():
+        key = config.get().openai_api_key
+        if not key:
+            raise RuntimeError("OPENAI_API_KEY ausente (config helper).")
+        from openai import OpenAI
+        return OpenAI(api_key=key, timeout=timeout_sec, max_retries=0)
+
+    ocr_mod._get_openai_client = _patched_client
+    fin_mod._get_openai_client = _patched_client
+
+
 def run_worker(
     conn: sqlite3.Connection, obra: str, limit: int | None = None,
 ) -> dict:
     """Processa tasks OCR_FIRST pendentes enfileiradas pelo reprocess."""
+    _apply_openai_timeout_patches()
     from rdo_agent.ocr_extractor import ocr_first_handler
 
     pending = conn.execute(
