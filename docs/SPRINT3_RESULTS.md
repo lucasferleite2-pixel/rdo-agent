@@ -88,3 +88,22 @@ Exit codes:
 3. **Escolher um dia-piloto** (sugestão: 2026-04-08, que tem maior densidade de classificações segundo a calibração) e rodar `python scripts/generate_rdo_piloto.py`.
 4. **Validação Q1/Q2** do plano da Sprint 3: revisar amostra de 30 classificações automáticas, calcular acerto.
 5. **Se tudo verde**, criar tag `v0.3.0-sprint3` (a tag `v0.3.0-sprint3-code` foi criada só para o código desta sessão).
+
+## Adendo Sprint 4 Op5 — RDO estendido para multi-source e multi-label (2026-04-22)
+
+O script `generate_rdo_piloto.py` foi estendido na sessao autonoma Sprint 4:
+
+- **Multi-label real:** evento com 2 categorias aparece em AMBAS secoes
+  (antes: so primary). Secoes secundarias anotadas com "(primary em ...)".
+- **`--modo-fiscal`:** flag opcional que omite a secao "Eventos fora de
+  escopo (off-topic)" para entregas a fiscalizacao contratual.
+- **Resumo numerico:** secao "Resumo do dia" agora inclui contagem por
+  source (audios, text_messages, imagens, documentos) e por categoria
+  primary (cronograma: 6, pagamento: 3, etc.).
+- **Tags de rastreabilidade:** cada linha de evento recebe tag por source:
+  `[ÁUDIO]`, `[TEXTO]`, `[IMAGEM]`, `[VIDEO-FRAME]`, `[PDF]`.
+- **Multi-source:** query estendida para incluir `text_message` (via
+  `messages.content`), `visual_analysis` (concatena campos Vision) e
+  `document` (via `documents.text`); timestamps resolvidos por source.
+
+Testes novos: 6 (17 totais no arquivo). Suite total do projeto: 212.

@@ -39,6 +39,17 @@ CATEGORY_HEADERS: list[tuple[str, str]] = [
     ("off_topic", "Eventos fora de escopo (off-topic)"),
 ]
 
+# Categorias contratualmente relevantes (apagar off_topic no --modo-fiscal)
+FISCAL_EXCLUDED_CATEGORIES: tuple[str, ...] = ("off_topic",)
+
+# Tag curta por source_type para rastreabilidade no markdown
+SOURCE_TAGS: dict[str, str] = {
+    "transcription": "[ÁUDIO]",
+    "text_message": "[TEXTO]",
+    "visual_analysis": "[IMAGEM]",
+    "document": "[PDF]",
+}
+
 
 def _now_iso_utc() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -48,23 +59,47 @@ def _fetch_classified_rows(
     conn: sqlite3.Connection, obra: str, date: str,
 ) -> list[sqlite3.Row]:
     """
-    Retorna rows classifications.classified cujo audio-fonte tem
-    timestamp_resolved no dia informado. Ordenado cronologicamente.
+    Retorna rows classifications.classified cujo timestamp resolvido
+    (via source_type) cai no dia informado. Filtragem por data feita em
+    Python (timestamp path varia por source_type) — query puxa todos e
+    `_resolve_display_fields` decide qual data usar.
+
+    Retorno inclui colunas suficientes para suportar 4 source_types:
+    transcription (via transcriptions+files+messages), text_message
+    (via messages direto), visual_analysis (via visual_analyses +
+    files derivados), document (via documents+files).
     """
     sql = """
         SELECT
             c.id AS classification_id,
             c.source_file_id,
+            c.source_type,
+            c.source_message_id,
             c.categories,
             c.confidence_model,
             c.reasoning AS classifier_reasoning,
             c.human_reviewed,
             c.human_corrected_text,
+
             t.text AS transcription_text,
             f_trans.timestamp_resolved AS ts_trans,
             f_audio.file_path AS audio_path,
             f_audio.timestamp_resolved AS ts_audio,
-            m.timestamp_whatsapp AS ts_msg
+            m.timestamp_whatsapp AS ts_msg,
+
+            m_direct.content AS text_message_content,
+            m_direct.timestamp_whatsapp AS ts_text_direct,
+
+            va.analysis_json AS visual_analysis_json,
+            f_vis_src.file_path AS visual_source_path,
+            f_vis_src.file_type AS visual_source_type,
+            f_vis_src.timestamp_resolved AS ts_visual,
+            f_vis_src.derived_from AS visual_source_parent,
+
+            d.text AS document_text,
+            d.page_count AS document_pages,
+            f_pdf.file_path AS document_pdf_path,
+            f_pdf.timestamp_resolved AS ts_document
         FROM classifications c
         LEFT JOIN transcriptions t
             ON t.obra = c.obra AND t.file_id = c.source_file_id
@@ -74,13 +109,116 @@ def _fetch_classified_rows(
             ON f_audio.file_id = f_trans.derived_from
         LEFT JOIN messages m
             ON m.message_id = f_audio.referenced_by_message
+        LEFT JOIN messages m_direct
+            ON m_direct.message_id = c.source_message_id
+        LEFT JOIN visual_analyses va
+            ON va.obra = c.obra AND va.file_id = c.source_file_id
+        LEFT JOIN files f_vis
+            ON f_vis.file_id = c.source_file_id
+        LEFT JOIN files f_vis_src
+            ON f_vis_src.file_id = f_vis.derived_from
+        LEFT JOIN documents d
+            ON d.obra = c.obra AND d.file_id = c.source_file_id
+        LEFT JOIN files f_doc
+            ON f_doc.file_id = c.source_file_id
+        LEFT JOIN files f_pdf
+            ON f_pdf.file_id = f_doc.derived_from
         WHERE c.obra = ?
           AND c.semantic_status = 'classified'
-          AND DATE(COALESCE(f_audio.timestamp_resolved, f_trans.timestamp_resolved))
-              = DATE(?)
-        ORDER BY COALESCE(f_audio.timestamp_resolved, f_trans.timestamp_resolved)
+        ORDER BY c.id
     """
-    return list(conn.execute(sql, (obra, date)).fetchall())
+    all_rows = list(conn.execute(sql, (obra,)).fetchall())
+    # Filtro por data em Python (timestamp_path varia por source_type)
+    return [
+        r for r in all_rows
+        if _resolve_display_fields(r)["date"] == date
+    ]
+
+
+def _resolve_display_fields(row: sqlite3.Row) -> dict:
+    """
+    Dado um row do SELECT multi-source de `_fetch_classified_rows`, deriva:
+      - text: string a exibir no RDO (respeita human_corrected_text)
+      - time_iso: timestamp ISO pra extrair HH:MM + ordenar
+      - date: YYYY-MM-DD pra filtrar por dia
+      - source_kind: 'audio' | 'texto' | 'imagem' | 'video-frame' | 'pdf'
+        para decidir a tag de rastreabilidade
+
+    Centraliza a logica que antes estava espalhada (transcription-only)
+    e generaliza para text_message, visual_analysis, document.
+    """
+    source_type = (row["source_type"] or "transcription").lower()
+    human_corrected = row["human_corrected_text"]
+
+    if source_type == "text_message":
+        text = human_corrected or row["text_message_content"] or "(mensagem vazia)"
+        ts = row["ts_text_direct"]
+        kind = "texto"
+    elif source_type == "visual_analysis":
+        # Distingue imagem original vs frame extraido de video:
+        # f_vis_src.derived_from populado = veio de video (frame)
+        parent = row["visual_source_parent"]
+        kind = "video-frame" if parent else "imagem"
+        if human_corrected:
+            text = human_corrected
+        else:
+            analysis_json = row["visual_analysis_json"] or ""
+            text = _analysis_json_to_display(analysis_json)
+        ts = row["ts_visual"]
+    elif source_type == "document":
+        text = (
+            human_corrected or row["document_text"]
+            or f"(planta/doc com {row['document_pages'] or '?'} paginas, "
+            f"texto digital ausente)"
+        )
+        ts = row["ts_document"]
+        kind = "pdf"
+    else:  # transcription (default)
+        text = (
+            human_corrected or row["transcription_text"] or "(texto ausente)"
+        )
+        ts = row["ts_audio"] or row["ts_trans"] or row["ts_msg"]
+        kind = "audio"
+
+    date = _extract_ymd(ts)
+    return {"text": text, "time_iso": ts, "date": date, "source_kind": kind}
+
+
+def _analysis_json_to_display(analysis_json_str: str) -> str:
+    """
+    Converte analysis_json (JSON com campos de Vision) em texto plano
+    pra RDO. Concat dos 4 campos Vision se existirem, ou '(analise
+    visual vazia)' pra sentinels.
+    """
+    try:
+        analysis = json.loads(analysis_json_str)
+    except (json.JSONDecodeError, TypeError):
+        return "(analise visual invalida)"
+    if isinstance(analysis, dict) and analysis.get("_sentinel"):
+        return f"(analise visual sem conteudo: {analysis.get('reason', '?')})"
+    if not isinstance(analysis, dict):
+        return "(analise visual malformada)"
+    parts: list[str] = []
+    for key, label in (
+        ("atividade_em_curso", "atividade"),
+        ("elementos_construtivos", "elementos"),
+        ("observacoes_tecnicas", "obs"),
+    ):
+        v = analysis.get(key)
+        if v and str(v).strip():
+            parts.append(f"{label}: {v}")
+    return " | ".join(parts) if parts else "(analise visual vazia)"
+
+
+def _extract_ymd(ts_iso: str | None) -> str:
+    """YYYY-MM-DD do timestamp, ou '' se invalido."""
+    if not ts_iso:
+        return ""
+    try:
+        cleaned = ts_iso.replace("Z", "+00:00")
+        return datetime.fromisoformat(cleaned).strftime("%Y-%m-%d")
+    except ValueError:
+        return ""
 
 
 def _extract_hhmm(ts_iso: str | None) -> str:
@@ -95,18 +233,27 @@ def _extract_hhmm(ts_iso: str | None) -> str:
         return "--:--"
 
 
-def _primary_category(categories_json: str) -> str:
-    """Retorna primeiro elemento do JSON array; '' se invalido."""
+def _parse_categories(categories_json: str) -> list[str]:
+    """Parseia o JSON array de categorias; [] se invalido."""
     try:
         cats = json.loads(categories_json)
-        if isinstance(cats, list) and cats:
-            return str(cats[0])
+        if isinstance(cats, list):
+            return [str(c) for c in cats]
     except (json.JSONDecodeError, TypeError):
         pass
-    return ""
+    return []
 
 
-def _group_by_primary(rows: list[sqlite3.Row]) -> dict[str, list[sqlite3.Row]]:
+def _primary_category(categories_json: str) -> str:
+    """Compat: retorna primeiro elemento (legacy)."""
+    cats = _parse_categories(categories_json)
+    return cats[0] if cats else ""
+
+
+def _group_by_primary(
+    rows: list[sqlite3.Row],
+) -> dict[str, list[sqlite3.Row]]:
+    """Compat: agrupamento single-label por primary (legacy)."""
     by: dict[str, list[sqlite3.Row]] = {}
     for r in rows:
         primary = _primary_category(r["categories"])
@@ -114,30 +261,94 @@ def _group_by_primary(rows: list[sqlite3.Row]) -> dict[str, list[sqlite3.Row]]:
     return by
 
 
-def _format_item_line(row: sqlite3.Row) -> str:
+def _group_by_all_categories(
+    rows: list[sqlite3.Row],
+) -> dict[str, list[tuple[sqlite3.Row, bool, list[str]]]]:
+    """
+    Multi-label: row aparece em TODAS as secoes das suas categorias.
+    Retorna dict categoria -> list[(row, is_primary, other_categories)].
+    `other_categories`: categorias adicionais do row (alem da atual),
+    pra renderizar "(tambem em X, Y)". `is_primary`: se a categoria
+    atual eh o primary do row.
+    """
+    by: dict[str, list[tuple[sqlite3.Row, bool, list[str]]]] = {}
+    for r in rows:
+        cats = _parse_categories(r["categories"])
+        if not cats:
+            by.setdefault("", []).append((r, True, []))
+            continue
+        for idx, cat in enumerate(cats):
+            others = [c for c in cats if c != cat]
+            is_primary = (idx == 0)
+            by.setdefault(cat, []).append((r, is_primary, others))
+    return by
+
+
+def _format_item_line(
+    row: sqlite3.Row,
+    *,
+    other_categories: list[str] | None = None,
+    is_primary: bool = True,
+) -> str:
     """
     Uma linha markdown por classification.
     Exemplo:
-      - [09:15] [REVISADO] file_id=file_trans_07 — Ô Lucas, daqui a...
+      - [09:15] [AUDIO] [REVISADO] file_id=`file_trans_07` — texto...
+      - [09:15] [TEXTO] [NÃO REVISADO] file_id=`m_abc` — msg (tambem em pagamento)
     """
-    ts_iso = row["ts_audio"] or row["ts_trans"] or row["ts_msg"]
-    hhmm = _extract_hhmm(ts_iso)
-    tag = "[REVISADO]" if row["human_reviewed"] else "[NÃO REVISADO]"
-    text = row["human_corrected_text"] or row["transcription_text"] or "(texto ausente)"
-    # Proteger markdown contra newlines no texto (compressao visual)
-    text_flat = " ".join(text.split())
+    display = _resolve_display_fields(row)
+    hhmm = _extract_hhmm(display["time_iso"])
+    source_tag = SOURCE_TAGS.get(
+        row["source_type"] or "transcription", "[?]",
+    )
+    # Diferencia video-frame de imagem pura (ambos source_type=visual_analysis)
+    if row["source_type"] == "visual_analysis" and display["source_kind"] == "video-frame":
+        source_tag = "[VIDEO-FRAME]"
+    review_tag = "[REVISADO]" if row["human_reviewed"] else "[NÃO REVISADO]"
+    text_flat = " ".join((display["text"] or "").split())
+
+    extras = ""
+    if other_categories and not is_primary:
+        extras = f" _(primary em `{row['categories']}`)_"
+    elif other_categories and is_primary:
+        extras = f" _(tambem em {', '.join(other_categories)})_"
+
     return (
-        f"- [{hhmm}] {tag} "
-        f"file_id=`{row['source_file_id']}` — {text_flat}"
+        f"- [{hhmm}] {source_tag} {review_tag} "
+        f"file_id=`{row['source_file_id']}` — {text_flat}{extras}"
     )
 
 
 def render_markdown(
     obra: str, date: str, rows: list[sqlite3.Row],
+    *, modo_fiscal: bool = False,
 ) -> str:
-    by_cat = _group_by_primary(rows)
+    """
+    Renderiza RDO em markdown.
+
+    Sprint 4 Op5 extensoes:
+      - Multi-label: evento aparece em TODAS suas categorias, com nota
+        "(tambem em X, Y)" pras secundarias
+      - --modo-fiscal: omite secao off_topic (eventos so-contratuais)
+      - Resumo numerico por categoria no topo
+      - Tags de source por evento ([AUDIO]/[TEXTO]/[IMAGEM]/[VIDEO-FRAME]/[PDF])
+    """
+    by_cat = _group_by_all_categories(rows)
     total = len(rows)
     reviewed = sum(1 for r in rows if r["human_reviewed"])
+
+    # Distribuicao por source_type para resumo
+    by_source: dict[str, int] = {}
+    for r in rows:
+        st = r["source_type"] or "transcription"
+        by_source[st] = by_source.get(st, 0) + 1
+
+    # Contagem por categoria primary (para o resumo — uma categoria por evento)
+    primary_counts: dict[str, int] = {}
+    for r in rows:
+        primary = _primary_category(r["categories"])
+        if primary:
+            primary_counts[primary] = primary_counts.get(primary, 0) + 1
 
     lines: list[str] = []
     lines.append(f"# RDO — EE Santa Quitéria — {date}")
@@ -145,42 +356,86 @@ def render_markdown(
     lines.append(f"**Obra:** {obra}")
     lines.append(f"**Data:** {date}")
     lines.append(f"**Gerado em:** {_now_iso_utc()}")
+    if modo_fiscal:
+        lines.append("**Modo:** fiscal (off-topic omitido)")
     lines.append("")
     lines.append("## Resumo do dia")
     lines.append("")
     lines.append(f"- Eventos classificados: **{total}**")
     lines.append(f"- Revisados por humano: **{reviewed}**")
-    lines.append(f"- Não revisados (classificados direto pelo detector): **{total - reviewed}**")
+    lines.append(
+        f"- Não revisados (classificados direto pelo detector): "
+        f"**{total - reviewed}**"
+    )
+    lines.append("")
+    lines.append("**Por fonte:**")
+    source_label = {
+        "transcription": "áudios transcritos",
+        "text_message": "mensagens de texto",
+        "visual_analysis": "imagens/frames analisados",
+        "document": "documentos extraídos",
+    }
+    for st, n in sorted(by_source.items(), key=lambda kv: -kv[1]):
+        lines.append(f"- {source_label.get(st, st)}: **{n}**")
+    lines.append("")
+    lines.append("**Por categoria (primary):**")
+    ordered_primary = [
+        (code, primary_counts.get(code, 0))
+        for code, _ in CATEGORY_HEADERS
+    ] + [("ilegivel", primary_counts.get("ilegivel", 0))]
+    for code, n in ordered_primary:
+        if n == 0 and (modo_fiscal and code in FISCAL_EXCLUDED_CATEGORIES):
+            continue
+        if n:
+            lines.append(f"- `{code}`: **{n}**")
     lines.append("")
 
     for code, header in CATEGORY_HEADERS:
+        if modo_fiscal and code in FISCAL_EXCLUDED_CATEGORIES:
+            continue
         items = by_cat.get(code, [])
         lines.append(f"## {header}")
         lines.append("")
         if not items:
             lines.append("_(nenhum evento desta categoria)_")
         else:
-            for item in items:
-                lines.append(_format_item_line(item))
+            # Ordena por timestamp dentro da categoria
+            sorted_items = sorted(
+                items,
+                key=lambda t: _resolve_display_fields(t[0])["time_iso"] or "",
+            )
+            for row, is_primary, others in sorted_items:
+                lines.append(
+                    _format_item_line(
+                        row, other_categories=others, is_primary=is_primary,
+                    )
+                )
         lines.append("")
 
-    # ilegivel -> Notas forenses
+    # ilegivel -> Notas forenses (nao afetado por modo_fiscal)
     ilegivel_items = by_cat.get("ilegivel", [])
     lines.append("## Notas forenses")
     lines.append("")
-    lines.append(f"- Eventos marcados como ilegíveis: **{len(ilegivel_items)}**")
+    lines.append(
+        f"- Eventos marcados como ilegíveis: **{len(ilegivel_items)}**"
+    )
     if ilegivel_items:
-        for r in ilegivel_items:
+        for row, _is_primary, _others in ilegivel_items:
             lines.append(
-                f"  - file_id=`{r['source_file_id']}` — transcrição degradada"
+                f"  - file_id=`{row['source_file_id']}` — "
+                f"fonte degradada (source_type=`{row['source_type']}`)"
             )
-    # Se houver categorias fora do vocabulario esperado (nao deveria acontecer)
-    unknown = [k for k in by_cat if k not in [c for c, _ in CATEGORY_HEADERS] + ["ilegivel", ""]]
+    unknown = [
+        k for k in by_cat
+        if k not in [c for c, _ in CATEGORY_HEADERS] + ["ilegivel", ""]
+    ]
     if unknown:
         lines.append(f"- ⚠ Categorias inesperadas encontradas: {unknown}")
     empty_cat = by_cat.get("", [])
     if empty_cat:
-        lines.append(f"- ⚠ {len(empty_cat)} classifications sem category primary valido")
+        lines.append(
+            f"- ⚠ {len(empty_cat)} classifications sem category primary valido"
+        )
     lines.append("")
 
     return "\n".join(lines)
@@ -301,9 +556,13 @@ def generate_rdo(
     obra: str,
     date: str,
     output_dir: Path,
+    modo_fiscal: bool = False,
 ) -> dict:
     """
     Gera RDO markdown (+ PDF se weasyprint disponivel).
+
+    Args:
+        modo_fiscal: se True, omite secao off_topic (entrega fiscalizacao).
 
     Returns:
         dict com chaves:
@@ -319,9 +578,10 @@ def generate_rdo(
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    base = f"rdo_piloto_{obra}_{date}"
+    suffix = "_fiscal" if modo_fiscal else ""
+    base = f"rdo_piloto_{obra}_{date}{suffix}"
     md_path = output_dir / f"{base}.md"
-    md_text = render_markdown(obra, date, rows)
+    md_text = render_markdown(obra, date, rows, modo_fiscal=modo_fiscal)
     md_path.write_text(md_text, encoding="utf-8")
 
     pdf_path: Path | None = output_dir / f"{base}.pdf"
@@ -356,6 +616,10 @@ def main() -> int:
     parser.add_argument(
         "--output-dir", default="reports", help="Diretorio de saida (default reports/)",
     )
+    parser.add_argument(
+        "--modo-fiscal", action="store_true",
+        help="Omite secao off-topic (entrega para fiscalizacao)",
+    )
     args = parser.parse_args()
 
     from rdo_agent.utils import config
@@ -372,6 +636,7 @@ def main() -> int:
             result = generate_rdo(
                 conn, obra=args.obra, date=args.data,
                 output_dir=Path(args.output_dir),
+                modo_fiscal=args.modo_fiscal,
             )
         except RuntimeError as exc:
             print(f"[err] {exc}", file=sys.stderr)
