@@ -1,0 +1,332 @@
+"""Testes dossier_builder — Sprint 5 Fase A F2."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+
+import pytest
+
+from rdo_agent.forensic_agent.dossier_builder import (
+    OVERVIEW_SAMPLE_FIRST_N,
+    OVERVIEW_SAMPLE_LAST_N,
+    _parse_categories,
+    build_day_dossier,
+    build_obra_overview_dossier,
+    compute_dossier_hash,
+)
+from rdo_agent.orchestrator import init_db
+
+# ---------------------------------------------------------------------------
+# Helpers fixture
+# ---------------------------------------------------------------------------
+
+
+def _seed_classification_transcription(
+    conn: sqlite3.Connection, *,
+    obra: str, idx: int, date: str, hhmm: str = "09:00",
+    category: str = "cronograma", secondary: list[str] | None = None,
+    text: str = "evento de teste",
+) -> None:
+    """Cria audio + transcription + classification pra data dada."""
+    now = "2026-04-22T00:00:00Z"
+    ts = f"{date}T{hhmm}:00Z"
+    audio = f"f_audio_{obra}_{idx:03d}"
+    trans = f"f_trans_{obra}_{idx:03d}"
+    msg = f"msg_{obra}_{idx:03d}"
+
+    conn.execute(
+        """INSERT INTO messages (message_id, obra, timestamp_whatsapp,
+        sender, content, media_ref, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (msg, obra, ts, "Lucas", "audio", f"AUDIO-{idx}.opus", now),
+    )
+    conn.execute(
+        """INSERT INTO files (file_id, obra, file_path, file_type, sha256,
+        size_bytes, referenced_by_message, timestamp_resolved,
+        timestamp_source, semantic_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (audio, obra, f"10_media/a{idx}.opus", "audio",
+         f"a{idx:06d}".ljust(64, "0"), 100, msg, ts, "whatsapp_txt",
+         "done", now),
+    )
+    conn.execute(
+        """INSERT INTO files (file_id, obra, file_path, file_type, sha256,
+        size_bytes, derived_from, derivation_method, referenced_by_message,
+        timestamp_resolved, timestamp_source, semantic_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (trans, obra, f"20_transcriptions/t{idx}.txt", "text",
+         f"t{idx:06d}".ljust(64, "0"), 50, audio, "whisper-1",
+         msg, ts, "whatsapp_txt", "awaiting_classification", now),
+    )
+    conn.execute(
+        """INSERT INTO transcriptions (obra, file_id, text, language,
+        confidence, low_confidence, api_call_id, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (obra, trans, text, "portuguese", 0.6, 0, None, now),
+    )
+    cats = [category] + (secondary or [])
+    conn.execute(
+        """INSERT INTO classifications (
+            obra, source_file_id, source_type,
+            quality_flag, quality_reasoning, human_review_needed,
+            human_reviewed, categories, confidence_model, reasoning,
+            classifier_api_call_id, classifier_model,
+            quality_api_call_id, quality_model,
+            source_sha256, semantic_status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (obra, trans, "transcription",
+         "coerente", "ok", 0, 0, json.dumps(cats), 0.85, "x",
+         None, "gpt-4o-mini", None, "gpt-4o-mini",
+         f"c{idx:06d}".ljust(64, "0"), "classified", now),
+    )
+    conn.commit()
+
+
+def _seed_financial_record(
+    conn: sqlite3.Connection, *,
+    obra: str, idx: int, date: str, hora: str = "11:13:24",
+    valor_centavos: int = 350000,
+    descricao: str = "50% sinal serralheria",
+) -> None:
+    now = "2026-04-22T00:00:00Z"
+    fid = f"f_img_{obra}_{idx:03d}"
+    conn.execute(
+        """INSERT INTO files (file_id, obra, file_path, file_type, sha256,
+        size_bytes, semantic_status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (fid, obra, f"10_media/p{idx}.jpg", "image",
+         f"p{idx:06d}".ljust(64, "0"), 1000, "ocr_extracted", now),
+    )
+    conn.execute(
+        """INSERT INTO financial_records (obra, source_file_id, doc_type,
+        valor_centavos, moeda, data_transacao, hora_transacao,
+        pagador_nome, recebedor_nome, descricao, confidence,
+        api_call_id, created_at)
+        VALUES (?, ?, 'pix', ?, 'BRL', ?, ?, 'Vale Nobre', 'Everaldo',
+                ?, 0.95, NULL, ?)""",
+        (obra, fid, valor_centavos, date, hora, descricao, now),
+    )
+    conn.commit()
+
+
+@pytest.fixture
+def db(tmp_path) -> sqlite3.Connection:
+    return init_db(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# _parse_categories (helper puro)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_categories_valid_json():
+    assert _parse_categories('["a","b"]') == ["a", "b"]
+
+
+def test_parse_categories_empty():
+    assert _parse_categories(None) == []
+    assert _parse_categories("") == []
+    assert _parse_categories("invalid") == []
+
+
+# ---------------------------------------------------------------------------
+# build_day_dossier
+# ---------------------------------------------------------------------------
+
+
+def test_build_day_dossier_empty_returns_empty_timeline(db):
+    d = build_day_dossier(db, "OBRA_X", "2026-04-06")
+    assert d["obra"] == "OBRA_X"
+    assert d["scope"] == "day"
+    assert d["scope_ref"] == "2026-04-06"
+    assert d["events_timeline"] == []
+    assert d["statistics"]["events_total"] == 0
+    assert d["financial_records"] == []
+
+
+def test_build_day_dossier_3_events_chronological_order(db):
+    """Events inseridos fora de ordem devem ser ordenados por timestamp."""
+    _seed_classification_transcription(
+        db, obra="OBRA_C", idx=3, date="2026-04-06", hhmm="15:00",
+        text="terceiro",
+    )
+    _seed_classification_transcription(
+        db, obra="OBRA_C", idx=1, date="2026-04-06", hhmm="09:00",
+        text="primeiro",
+    )
+    _seed_classification_transcription(
+        db, obra="OBRA_C", idx=2, date="2026-04-06", hhmm="12:00",
+        text="segundo",
+    )
+    d = build_day_dossier(db, "OBRA_C", "2026-04-06")
+    assert d["statistics"]["events_total"] == 3
+    texts = [e["content_full"] for e in d["events_timeline"]]
+    assert texts == ["primeiro", "segundo", "terceiro"]
+    # horarios
+    horas = [e["hora_brasilia"] for e in d["events_timeline"]]
+    assert horas == ["09:00", "12:00", "15:00"]
+
+
+def test_build_day_dossier_filters_other_dates(db):
+    _seed_classification_transcription(
+        db, obra="OBRA_F", idx=1, date="2026-04-06", text="dia 6",
+    )
+    _seed_classification_transcription(
+        db, obra="OBRA_F", idx=2, date="2026-04-07", text="dia 7",
+    )
+    d = build_day_dossier(db, "OBRA_F", "2026-04-06")
+    assert d["statistics"]["events_total"] == 1
+    assert d["events_timeline"][0]["content_full"] == "dia 6"
+
+
+def test_build_day_dossier_includes_financial_records(db):
+    _seed_classification_transcription(
+        db, obra="OBRA_FIN", idx=1, date="2026-04-06", text="audio",
+    )
+    _seed_financial_record(
+        db, obra="OBRA_FIN", idx=1, date="2026-04-06",
+        valor_centavos=350000, descricao="50% de sinal serralheria",
+    )
+    d = build_day_dossier(db, "OBRA_FIN", "2026-04-06")
+    assert len(d["financial_records"]) == 1
+    assert d["financial_records"][0]["valor_brl"] == 3500.00
+    assert d["context_hints"]["day_has_payment"] is True
+    assert d["context_hints"]["day_has_contract_establishment"] is True
+
+
+def test_build_day_dossier_statistics_by_category(db):
+    _seed_classification_transcription(
+        db, obra="O", idx=1, date="2026-04-06",
+        category="pagamento", text="x",
+    )
+    _seed_classification_transcription(
+        db, obra="O", idx=2, date="2026-04-06",
+        category="cronograma", text="y",
+    )
+    _seed_classification_transcription(
+        db, obra="O", idx=3, date="2026-04-06",
+        category="cronograma", text="z",
+    )
+    d = build_day_dossier(db, "O", "2026-04-06")
+    assert d["statistics"]["by_primary_category"] == {
+        "pagamento": 1, "cronograma": 2,
+    }
+    assert d["statistics"]["by_source_type"] == {"transcription": 3}
+
+
+def test_build_day_dossier_secondary_categories_preserved(db):
+    _seed_classification_transcription(
+        db, obra="OS", idx=1, date="2026-04-06",
+        category="reporte_execucao", secondary=["especificacao_tecnica"],
+        text="medicao de tubo",
+    )
+    d = build_day_dossier(db, "OS", "2026-04-06")
+    evt = d["events_timeline"][0]
+    assert evt["primary_category"] == "reporte_execucao"
+    assert evt["secondary_categories"] == ["especificacao_tecnica"]
+
+
+def test_build_day_dossier_content_full_omitted_when_long(db):
+    long_text = "A" * 600
+    _seed_classification_transcription(
+        db, obra="OL", idx=1, date="2026-04-06", text=long_text,
+    )
+    d = build_day_dossier(db, "OL", "2026-04-06")
+    evt = d["events_timeline"][0]
+    assert evt["content_full"] is None
+    assert len(evt["content_preview"]) == 150
+
+
+# ---------------------------------------------------------------------------
+# build_obra_overview_dossier
+# ---------------------------------------------------------------------------
+
+
+def test_build_overview_small_obra_returns_all_events(db):
+    for i in range(5):
+        _seed_classification_transcription(
+            db, obra="OV1", idx=i, date=f"2026-04-0{6 + (i % 3)}",
+            text=f"evento {i}",
+        )
+    d = build_obra_overview_dossier(db, "OV1")
+    assert d["scope"] == "obra_overview"
+    assert d["scope_ref"] is None
+    assert d["events_total_in_obra"] == 5
+    assert d["events_sampled"] == 5
+    assert len(d["events_timeline"]) == 5
+
+
+def test_build_overview_large_obra_samples_first_and_last(db):
+    """>50 eventos: amostra primeiros 30 + ultimos 20."""
+    total = OVERVIEW_SAMPLE_FIRST_N + OVERVIEW_SAMPLE_LAST_N + 20
+    for i in range(total):
+        hour = 8 + (i % 10)
+        _seed_classification_transcription(
+            db, obra="OVBIG", idx=i, date="2026-04-06",
+            hhmm=f"{hour:02d}:{(i * 3) % 60:02d}",
+            text=f"evt {i}",
+        )
+    d = build_obra_overview_dossier(db, "OVBIG")
+    assert d["events_total_in_obra"] == total
+    assert d["events_sampled"] == OVERVIEW_SAMPLE_FIRST_N + OVERVIEW_SAMPLE_LAST_N
+
+
+def test_build_overview_daily_summaries(db):
+    _seed_classification_transcription(
+        db, obra="OD", idx=1, date="2026-04-06",
+        category="pagamento", text="a",
+    )
+    _seed_classification_transcription(
+        db, obra="OD", idx=2, date="2026-04-06",
+        category="cronograma", text="b",
+    )
+    _seed_classification_transcription(
+        db, obra="OD", idx=3, date="2026-04-07",
+        category="material", text="c",
+    )
+    d = build_obra_overview_dossier(db, "OD")
+    ds = {x["data"]: x for x in d["daily_summaries"]}
+    assert ds["2026-04-06"]["events_count"] == 2
+    assert ds["2026-04-07"]["events_count"] == 1
+    assert "pagamento" in ds["2026-04-06"]["main_topics"]
+    assert "material" in ds["2026-04-07"]["main_topics"]
+
+
+def test_build_overview_includes_all_financial_records(db):
+    _seed_classification_transcription(
+        db, obra="OFIN", idx=1, date="2026-04-06", text="x",
+    )
+    _seed_financial_record(
+        db, obra="OFIN", idx=1, date="2026-04-06",
+        valor_centavos=100000, descricao="a",
+    )
+    _seed_financial_record(
+        db, obra="OFIN", idx=2, date="2026-04-10",
+        valor_centavos=200000, descricao="b",
+    )
+    d = build_obra_overview_dossier(db, "OFIN")
+    assert len(d["financial_records"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# compute_dossier_hash
+# ---------------------------------------------------------------------------
+
+
+def test_compute_dossier_hash_deterministic():
+    d1 = {"a": 1, "b": 2}
+    d2 = {"b": 2, "a": 1}
+    assert compute_dossier_hash(d1) == compute_dossier_hash(d2)
+
+
+def test_compute_dossier_hash_differs_when_content_differs():
+    d1 = {"a": 1}
+    d2 = {"a": 2}
+    assert compute_dossier_hash(d1) != compute_dossier_hash(d2)
+
+
+def test_compute_dossier_hash_sha256_format():
+    h = compute_dossier_hash({"x": "y"})
+    assert len(h) == 64
+    assert all(c in "0123456789abcdef" for c in h)
