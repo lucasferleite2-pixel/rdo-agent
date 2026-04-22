@@ -144,6 +144,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
     _migrate_api_calls_sprint2_phase2(conn)
     _migrate_classifications_sprint4(conn)
+    _migrate_financial_records_sprint4_op8(conn)
     conn.commit()
     return conn
 
@@ -179,6 +180,63 @@ def _migrate_classifications_sprint4(conn: sqlite3.Connection) -> None:
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(classifications)")}
     if "source_message_id" not in existing:
         conn.execute("ALTER TABLE classifications ADD COLUMN source_message_id TEXT")
+
+
+def _migrate_financial_records_sprint4_op8(conn: sqlite3.Connection) -> None:
+    """
+    Sprint 4 Op8 — cria tabela financial_records se ausente.
+
+    Pipeline OCR-first para imagens desacopla descricao visual (Vision)
+    de extracao de texto em documentos fotografados (OCR). Quando o
+    OCR detecta comprovante financeiro (PIX/TED/boleto/nota/recibo),
+    o extrator estrutural popula esta tabela com valor em centavos,
+    datas, partes envolvidas etc.
+
+    Idempotente: `CREATE TABLE IF NOT EXISTS` ja eh aplicado via
+    `executescript(schema.sql)` em init_db; esta funcao existe como
+    ponto-de-extensao futuro (ex: adicionar colunas via ALTER) e
+    documentacao do invariante.
+    """
+    tables = {
+        row["name"]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    if "financial_records" not in tables:
+        # Fallback para o caso schema.sql nao ter sido reexecutado
+        # (improvavel, mas preserva idempotencia explicita).
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS financial_records (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                obra                TEXT NOT NULL,
+                source_file_id      TEXT NOT NULL,
+                doc_type            TEXT,
+                valor_centavos      INTEGER,
+                moeda               TEXT DEFAULT 'BRL',
+                data_transacao      TEXT,
+                hora_transacao      TEXT,
+                pagador_nome        TEXT,
+                pagador_doc         TEXT,
+                recebedor_nome      TEXT,
+                recebedor_doc       TEXT,
+                chave_pix           TEXT,
+                descricao           TEXT,
+                instituicao_origem  TEXT,
+                instituicao_destino TEXT,
+                raw_ocr_text        TEXT,
+                confidence          REAL,
+                api_call_id         INTEGER,
+                created_at          TEXT NOT NULL,
+                FOREIGN KEY (source_file_id) REFERENCES files(file_id),
+                FOREIGN KEY (api_call_id)    REFERENCES api_calls(id),
+                UNIQUE (obra, source_file_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_financial_records_obra_data
+                ON financial_records(obra, data_transacao);
+            """
+        )
 
 
 def enqueue(conn: sqlite3.Connection, task: Task) -> int:

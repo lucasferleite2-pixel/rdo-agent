@@ -317,3 +317,46 @@ CREATE TABLE IF NOT EXISTS classifications (
 CREATE INDEX IF NOT EXISTS idx_classifications_obra_status ON classifications(obra, semantic_status);
 CREATE INDEX IF NOT EXISTS idx_classifications_review     ON classifications(human_review_needed, human_reviewed);
 CREATE INDEX IF NOT EXISTS idx_classifications_source    ON classifications(source_file_id);
+
+
+-- ---------------------------------------------------------------------------
+-- financial_records — dados estruturados de comprovantes financeiros
+-- (Sprint 4 Op8 — pipeline OCR-first)
+--
+-- Populada pelo handler `ocr_first_handler` quando OCR + classificador
+-- estrutural detectam comprovante PIX/TED/boleto/nota/recibo. Separada
+-- de `documents` pq o schema de dados tabulares (valor, pagador,
+-- recebedor, chave Pix etc.) eh radicalmente distinto de texto livre.
+-- Valor em centavos (INTEGER) para evitar erros de ponto flutuante.
+--
+-- UNIQUE(obra, source_file_id) garante 1 registro por imagem —
+-- reprocessar a mesma imagem sobrescreve atomicamente.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS financial_records (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    obra                TEXT NOT NULL,
+    source_file_id      TEXT NOT NULL,   -- file_id da imagem original
+    doc_type            TEXT,             -- 'pix', 'ted', 'boleto', 'nota_fiscal', 'outro'
+    valor_centavos      INTEGER,          -- valor em centavos (evita float)
+    moeda               TEXT DEFAULT 'BRL',
+    data_transacao      TEXT,             -- ISO YYYY-MM-DD
+    hora_transacao      TEXT,             -- HH:MM:SS
+    pagador_nome        TEXT,
+    pagador_doc         TEXT,             -- CNPJ/CPF como aparece (mascarado se mascarado)
+    recebedor_nome      TEXT,
+    recebedor_doc       TEXT,
+    chave_pix           TEXT,
+    descricao           TEXT,             -- "Informação para o recebedor" em PIX
+    instituicao_origem  TEXT,
+    instituicao_destino TEXT,
+    raw_ocr_text        TEXT,             -- texto bruto OCR pra auditoria
+    confidence          REAL,             -- 0.0-1.0, retorno do modelo
+    api_call_id         INTEGER,
+    created_at          TEXT NOT NULL,
+    FOREIGN KEY (source_file_id) REFERENCES files(file_id),
+    FOREIGN KEY (api_call_id)    REFERENCES api_calls(id),
+    UNIQUE (obra, source_file_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_financial_records_obra_data
+    ON financial_records(obra, data_transacao);
