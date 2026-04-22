@@ -77,25 +77,59 @@ antigas + reprocessar pipeline OCR-first retroativamente
 
 ## Metricas
 
-| Metrica | Baseline V1 | Atual V2 (parcial) |
-|---|---:|---:|
-| Amostras ground truth | 11/11 encontradas | 11/11 encontradas |
-| Keyword match | 7/11 | 7/11 (inalterado — amostras GT nao reprocessadas) |
-| Divergencias v1/v2 | 1 | 2 |
-| `false_off_topic` | 0 | 0 |
-| visual_analyses totais | 50 | 50 (mesmos — archive eh copia) |
-| visual_analyses_archive | 0 | 50 |
-| documents (ocr_first) | 7 | 7 (mesmo — reprocess nao criou novos) |
-| financial_records | 4 | 4 (mesmo) |
-| tasks OCR_FIRST done | 10 | 17 (+7) |
-| tasks OCR_FIRST pending | 0 | 38 (+38, aguardando API) |
-| tasks OCR_FIRST failed | 0 | 0 |
+### Parciais (pre-retomada)
 
-**Nota importante sobre comparacao:** como archive eh COPIA (nao move) e
-rows atuais de visual_analyses permanecem, o measure_vision_accuracy
-sobre estado atual retorna mesmas metricas que baseline. A mudanca
-semantica so apareceria APOS as 38 pending rodarem e criarem NOVAS
-rows com prompt V2. Isso eh divida tecnica documentada.
+| Metrica | Baseline V1 | Parcial V2 |
+|---|---:|---:|
+| Keyword match | 7/11 | 7/11 (amostras GT nao reprocessadas ainda) |
+| Divergencias v1/v2 | 1 | 2 |
+| tasks OCR_FIRST done | 10 | 17 (+7) |
+| tasks OCR_FIRST pending | 0 | 38 |
+
+### FINAIS (pos-retomada completa, 16:22-16:43Z via rdo-agent process)
+
+O operador retomou o worker manualmente em pts/3 apos a API OpenAI
+estabilizar. Execucao full completou sem failed:
+
+| Metrica | Baseline V1 | **Final V2** |
+|---|---:|---:|
+| Keyword match | **7/11** | **9/11 (+18%)** |
+| Divergencias v1/v2 (rows c/ conteudo diferente) | 1 | **8** |
+| `false_off_topic` | 0 | 0 |
+| visual_analyses totais | 50 | **96** (+46 rows V2 novas) |
+| visual_analyses_archive | 0 | 54 |
+| documents (ocr_first) | 7 | **8** (+1 novo via retroativo) |
+| financial_records | 4 | 4 (sem comprovantes novos descobertos) |
+| tasks OCR_FIRST done | 10 | **58** (+48 no reprocess) |
+| tasks visual_analysis done | 59 | **104** (+45 rotas 'foto' V2) |
+| tasks FAILED | 0 | 0 |
+
+**Amostra qualitativa do V2 em producao:**
+
+- Row 55: `estrutura metalica de cobertura montada — etapa de montagem
+  finalizada`, categoria_sugerida=`reporte_execucao` ✅
+  (V1 dizia 'sem atividade' = off_topic — erro corrigido)
+- Row 56: `estrutura metalica do telhado montada — etapa finalizada`,
+  categoria_sugerida=`reporte_execucao` ✅
+- Row 57: `equipamento em exposicao comercial — nao ha atividade de
+  canteiro`, categoria_sugerida=`off_topic` ✅
+  (Vonder/Feicon — V2 mantem classificacao correta)
+
+## Custo total FINAL
+
+| Fase | Custo USD (delta) |
+|---|---:|
+| Fase 1 (baseline) | 0.0 |
+| Fase 2 (V2 prompt impl) | 0.0 |
+| Fase 3 (schema archive) | 0.0 |
+| Fase 4 (script reprocess) | 0.0 |
+| Fase 5a (piloto + 4 VA V2) | ~0.087 |
+| Fase 5b (retomada full 38 OCR + 45 VA V2) | ~0.335 |
+| Fase 6 (measure re-run) | 0.0 |
+| **Total Op9 delta** | **~US\$ 0.422** |
+| **Cumulativo vault** | US\$ 1.0983 |
+
+Budget: US$ 1.00. Usado: 42% (US$ 0.422). Gate nao acionado.
 
 ## Custo total
 
@@ -126,25 +160,28 @@ Budget: US$ 1.00. Usado: 9% (US\$ 0.087). Gate acionado: nao.
 
 ## Dividas criadas para revisao
 
-1. **Divida #1 — 38 tasks OCR_FIRST pending:** API OpenAI latente
-   durante Fase 5. Retomar via `rdo-agent process --task-type ocr_first
-   --obra EVERALDO_SANTAQUITERIA` quando API estavel. Custo esperado:
-   ~US$ 0.20 (delta).
-2. **Divida #2 — Validar V2 contra ground truth apos reprocess
-   completo:** executar `python scripts/measure_vision_accuracy.py`
-   novamente apos as 38 pending completarem. Esperado: melhoria em
-   keyword matches (especialmente frames `f_445a0975174b` e
-   `f_1f818f64eefa` que V1 erra).
+1. ~~**Divida #1 — 38 tasks OCR_FIRST pending:**~~ **RESOLVIDA** —
+   operador retomou worker via `rdo-agent process` em pts/3 apos API
+   estabilizar. Todas 58 completaram sem failed.
+2. ~~**Divida #2 — Validar V2 contra ground truth apos reprocess:**~~
+   **RESOLVIDA** — measure rodado pos-reprocess completo. Confirmado
+   +18% (7/11 → 9/11) em keyword match, V2 produziu 8 analyses
+   semanticamente diferentes de V1 na mesma amostra.
 3. **Divida #3 — Timeout hardening no codigo principal:** `ocr_extractor`
    e `financial_ocr` sem timeout explicito no `OpenAI()` constructor.
    Sprint futura deveria adicionar `timeout=30.0, max_retries=1` como
    default em `_get_openai_client`. Fora de escopo Op9 por blacklist.
 4. **Divida #4 — Archive preserva copia, nao move:** design atual mantem
-   rows originais intactas. Pode crescer DB significativamente em vaults
-   multi-tenancy. Avaliar em revisao.
-5. **Divida #5 — 4 VA tasks V2 novas foram processadas:** seus outputs
-   em visual_analyses com prompt V2 podem ser validados manualmente
-   contra ground truth pela primeira vez.
+   rows originais intactas. 54 rows em archive + 96 em visual_analyses
+   (versus 50 pre-Op9) = crescimento 2x da tabela. Pode crescer DB
+   significativamente em vaults multi-tenancy. Avaliar em revisao.
+5. **Divida #5 — Nenhum comprovante financeiro novo descoberto:**
+   pipeline retroativo OCR-first nao achou PIX adicional. Os 44 frames
+   de video nao contem texto (eram fotos de canteiro real). Confirma
+   que Op8 ja capturou tudo nas 10 imagens originais.
+6. **Divida #6 — 3 das 11 amostras GT divergiram entre V1 e V2** em
+   graus menores. Candidatas a revisao humana adicional: `f_445a0975174b`
+   (tubo/pilar), `f_1f818f64eefa` (telhado), `f_e68d7a6ac115` (frame ruim).
 
 ## Estado final
 
