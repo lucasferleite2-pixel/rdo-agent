@@ -916,8 +916,6 @@ def narrate_cmd(
             })
             continue
 
-        total_cost += narration.cost_usd
-
         validation = validate_narrative(
             narration.markdown_body, dossier,
             narration.self_assessment, narration.markdown_text,
@@ -931,18 +929,26 @@ def narrate_cmd(
             force=skip_cache,
         )
 
+        # Divida #20: so conta cost se a narrativa foi efetivamente
+        # persistida. Se o save retornou was_cached=True (API call
+        # descartada), reporta cost 0 pra nao inflar acumulado.
+        effective_cost = 0.0 if was_cached else narration.cost_usd
+        total_cost += effective_cost
+
         results_summary.append({
             "scope": sc, "ref": ref, "cached": was_cached,
             "narrative_id": narrative_id, "path": str(path),
             "passed": validation["passed"],
             "warnings_count": len(validation["warnings"]),
-            "cost_usd": narration.cost_usd,
+            "cost_usd": effective_cost,
             "malformed": narration.is_malformed,
         })
         status = "[green]PASSED[/green]" if validation["passed"] else "[yellow]WARNINGS[/yellow]"
         console.print(
             f"[green]+[/green] id={narrative_id} path={path} "
-            f"{status} cost=US$ {narration.cost_usd:.4f}"
+            f"{status} cost=US$ {effective_cost:.4f}"
+            + (" [dim](API call descartada — cache hit)[/dim]"
+               if was_cached and narration.cost_usd > 0 else "")
         )
 
     conn.close()
