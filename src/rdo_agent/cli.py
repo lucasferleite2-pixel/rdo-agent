@@ -928,6 +928,7 @@ def narrate_cmd(
             dossier_hash=dossier_hash, narration=narration,
             validation=validation, events_count=events_count,
             reports_root=reports_path,
+            force=skip_cache,
         )
 
         results_summary.append({

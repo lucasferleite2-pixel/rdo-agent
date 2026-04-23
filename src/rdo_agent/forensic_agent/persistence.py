@@ -79,6 +79,7 @@ def save_narrative(
     validation: dict,
     events_count: int,
     reports_root: Path = DEFAULT_REPORTS_ROOT,
+    force: bool = False,
 ) -> tuple[int, Path, bool]:
     """
     Salva narrativa em DB + arquivo local.
@@ -91,10 +92,14 @@ def save_narrative(
         events_count: numero de eventos no dossier (pra coluna
             forensic_narratives.events_count)
         reports_root: raiz onde salvar arquivo (default 'reports/narratives')
+        force: se True, INVALIDA cache existente (DELETE row + sobrescreve
+            arquivo) antes de inserir. Usado pelo --skip-cache da CLI
+            pra garantir que a API call nao vira desperdicio.
 
     Returns:
         (narrative_id, arquivo_path, was_cached)
-        was_cached=True se ja existia (nao criou novo); False se criou.
+        was_cached=True se ja existia e `force=False` (nao criou novo);
+        False se criou.
 
     Levanta nada — errors de disk writes sao logados mas nao abortam.
     """
@@ -103,13 +108,23 @@ def save_narrative(
         conn, obra, scope, scope_ref, dossier_hash,
     )
     if existing_id is not None:
-        filename = _compute_filename(scope, scope_ref)
-        file_path = reports_root / obra / filename
+        if not force:
+            filename = _compute_filename(scope, scope_ref)
+            file_path = reports_root / obra / filename
+            log.info(
+                "narrative cache hit for %s %s %s (id=%s)",
+                obra, scope, scope_ref, existing_id,
+            )
+            return existing_id, file_path, True
+        # force=True: invalida (DELETE) pra re-inserir com novo id
         log.info(
-            "narrative cache hit for %s %s %s (id=%s)",
+            "force=True — invalidando narrativa %s %s %s (id=%s)",
             obra, scope, scope_ref, existing_id,
         )
-        return existing_id, file_path, True
+        conn.execute(
+            "DELETE FROM forensic_narratives WHERE id = ?", (existing_id,),
+        )
+        conn.commit()
 
     # 2) Insert em DB
     confidence = None

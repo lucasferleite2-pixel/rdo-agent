@@ -141,6 +141,52 @@ def test_save_idempotent_via_cache_hit(db, tmp_path):
     assert total == 1
 
 
+def test_save_force_true_invalidates_cache_and_creates_new_id(db, tmp_path):
+    """force=True: mesmo com cache hit, DELETE existente + INSERT nova
+    (simula --skip-cache que nao pode desperdicar a API call)."""
+    reports = tmp_path / "reports"
+    id1, _, cached1 = save_narrative(
+        db, obra="OBRA_F", scope="day", scope_ref="2026-04-10",
+        dossier_hash="h_equal", narration=_sample_narration(),
+        validation=_sample_validation(), events_count=5,
+        reports_root=reports,
+    )
+    id2, _, cached2 = save_narrative(
+        db, obra="OBRA_F", scope="day", scope_ref="2026-04-10",
+        dossier_hash="h_equal", narration=_sample_narration(),
+        validation=_sample_validation(), events_count=5,
+        reports_root=reports,
+        force=True,
+    )
+    assert cached1 is False
+    assert cached2 is False  # nova row foi criada
+    assert id2 != id1  # id incrementou
+    # antiga foi apagada: so 1 row em DB
+    total = db.execute(
+        "SELECT COUNT(*) FROM forensic_narratives WHERE obra='OBRA_F'"
+    ).fetchone()[0]
+    assert total == 1
+    # E eh a nova
+    row = db.execute(
+        "SELECT id FROM forensic_narratives WHERE obra='OBRA_F'"
+    ).fetchone()
+    assert row["id"] == id2
+
+
+def test_save_force_true_no_existing_behaves_as_normal(db, tmp_path):
+    """force=True sem cache hit: comportamento normal (insere)."""
+    reports = tmp_path / "reports"
+    narrative_id, path, was_cached = save_narrative(
+        db, obra="OBRA_FN", scope="day", scope_ref="2026-04-11",
+        dossier_hash="novel_hash", narration=_sample_narration(),
+        validation=_sample_validation(), events_count=5,
+        reports_root=reports,
+        force=True,
+    )
+    assert was_cached is False
+    assert narrative_id > 0
+
+
 def test_save_different_hashes_create_distinct_rows(db, tmp_path):
     reports = tmp_path / "reports"
     id1, _, c1 = save_narrative(
