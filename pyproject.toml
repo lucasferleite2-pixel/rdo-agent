@@ -40,6 +40,9 @@ dependencies = [
 
     # PDF generation (Sprint 3 §Fase 4)
     "weasyprint>=60",
+
+    # Ground Truth YAML (Sprint 5 Fase C)
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
