@@ -49,6 +49,12 @@ from rdo_agent.forensic_agent.correlator import (
     find_correlations_obra_wide,
     save_correlation,
 )
+from rdo_agent.forensic_agent.types import (
+    CONFIDENCE_HIGH,
+    CONFIDENCE_LOW,
+    CONFIDENCE_MEDIUM,
+    CorrelationType,
+)
 from rdo_agent.forensic_agent.dossier_builder import (
     build_day_dossier,
     build_obra_overview_dossier,
@@ -79,7 +85,11 @@ __all__ = [
     "save_narrative",
     "validate_narrative",
     # Fase B esqueleto
+    "CONFIDENCE_HIGH",
+    "CONFIDENCE_LOW",
+    "CONFIDENCE_MEDIUM",
     "Correlation",
+    "CorrelationType",
     "EventSource",
     "find_correlations_for_day",
     "find_correlations_obra_wide",
