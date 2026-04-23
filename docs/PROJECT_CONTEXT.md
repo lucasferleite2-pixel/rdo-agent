@@ -2,7 +2,7 @@
 
 > **Propósito deste documento:** servir como briefing completo pra qualquer nova conversa de IA (Claude, GPT, etc) assumir o projeto sem perda de contexto. Leia de ponta a ponta antes de tomar qualquer decisão técnica ou arquitetural.
 >
-> **Última atualização:** 23/04/2026 — versão rdo-agent v0.6.1-case-validated
+> **Última atualização:** 23/04/2026 — versão rdo-agent v0.8.0-forensic-complete
 
 ---
 
@@ -160,7 +160,8 @@ INPUT: export WhatsApp (.txt + mídia) → pasta da vault
 │   │       ├── temporal.py
 │   │       ├── semantic.py
 │   │       └── math.py
-│   └── ground_truth/                   # ← Fase C (a implementar na Sessão 1)
+│   ├── ground_truth/                   # Fase C (loader YAML, schema)
+│   └── gt_extractor/                   # Fase D (entrevista simple + adaptive)
 │
 ├── docs/
 │   ├── PROJECT_CONTEXT.md              # ← ESTE ARQUIVO
@@ -284,6 +285,33 @@ Base arquitetural: setup repo, estrutura Python, ambiente WSL, integração SDKs
 - Investigação manual confirmou achado do detector MATH_VALUE_DIVERGENCE
 - Ground Truth YAML documentado: `docs/ground_truth/EVERALDO_SANTAQUITERIA.yml`
 
+### 5.10 Sprint 5 Fase C (23/04 tarde, Sessão 1) — `v0.7.0-ground-truth-polish`
+
+- 6 dívidas técnicas fechadas: #14, #19, #20, #22, #23, #28
+- Módulo `src/rdo_agent/ground_truth/` (schema + loader + validação YAML)
+- CLI `rdo-agent narrate --context docs/ground_truth/<obra>.yml`
+- Narrator V3_GT: verifica corpus vs GT (CONFORME/DIVERGENTE/NÃO VERIFICÁVEL)
+- 2 narrativas regeneradas com GT real (passed=YES)
+- 480 → 515 testes; sessão ~35min; custo $0.38
+
+### 5.11 Sprint 5 Fase D + E (23/04 final de tarde, Sessão 2) — `v0.8.0-forensic-complete`
+
+- 5 dívidas técnicas fechadas: #24, #25, #26, #29, #30
+- **Fase D**: módulo `src/rdo_agent/gt_extractor/` com entrevista interativa
+  * Modo simple: questionário síncrono (zero API)
+  * Modo adaptive: Claude conduz, detecta contradições, sugere campos
+  * CLI: `rdo-agent extract-gt --obra X [--mode simple|adaptive]`
+- **Fase E**: narrator V4_ADVERSARIAL
+  * Nova seção "Contestações Hipotéticas" (3-5 argumentos da contraparte)
+  * CLI: `rdo-agent narrate --adversarial` (combinável com `--context`)
+  * Uso: preparar defesa em disputa judicial/administrativa
+- Tuning SEMANTIC com time_decay + keyword weights (semantic_v2)
+- MATH distingue valor unitário (R$/metro) de agregado (total)
+- Overview inclui `correlations_sample_weak` para comentar padrões
+- MAX_TOKENS 6144→10240 e MAX_BODY_CHARS 20000→40000 (overview completo)
+- 3 narrativas EVERALDO regeneradas com GT + adversarial
+- 515 → 565 testes; sessão ~50min; custo $0.85
+
 ---
 
 ## 6. Caso Piloto — EVERALDO_SANTAQUITERIA (ground truth)
@@ -334,21 +362,10 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 ✅ v0.5.1  — Sprint 5 Fase A: agente narrador forense validado
 ✅ v0.6.0  — Sprint 5 Fase B: correlator rule-based (3 detectores)
 ✅ v0.6.1  — Case validation empírica em corpus real
+✅ v0.7.0  — Sprint 5 Fase C + 6 dívidas (Sessão 1)
+✅ v0.8.0  — Sprint 5 Fase D+E + 5 dívidas (Sessão 2)
 
-### 7.2 CAMINHO ATÉ v1.0 (3 sessões)
-🟡 SESSÃO 1 → v0.7.0-ground-truth-polish (estimativa 2-4h autônoma, custo $0.50)
-├─ Fix 6 dívidas técnicas: #14, #19, #20, #22, #23, #28
-├─ Sprint 5 Fase C: Ground Truth Injection
-├─ Módulo novo: src/rdo_agent/ground_truth/ (schema + loader)
-├─ CLI: rdo-agent narrate --context obra.yml
-├─ Narrator v3: verifica corpus vs GT, marca CONFORME/DIVERGENTE/NÃO VERIFICÁVEL
-└─ Teste real: regenerar narrativas EVERALDO com YAML GT
-🟡 SESSÃO 2 → v0.8.0-forensic-complete (estimativa 3-5h autônoma, custo $2-3)
-├─ Sprint 5 Fase D: Ground Truth Extraction interativa
-│   └─ Agente conversa com operador, extrai GT, gera YAML
-├─ Sprint 5 Fase E: Contestações hipotéticas
-│   └─ Agente gera seções "Como a outra parte rebateria X"
-└─ Demais dívidas técnicas cosméticas (#13, #16, #24-#27)
+### 7.2 CAMINHO ATÉ v1.0 (1 sessão restante)
 🟡 SESSÃO 3 → v1.0-production-ready (estimativa 4-6h autônoma, custo $1-2)
 ├─ UI Web básica (FastAPI + HTML/htmx)
 ├─ Dashboard de narrativas + correlações
@@ -431,23 +448,31 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 - ~~#12~~: Retry JSON truncados
 - ~~#15~~: Gerar 4 narrativas restantes Fase A
 
-### 9.2 Pendentes (pro Sessão 1 resolver)
+### 9.2 Resolvidas em Sessão 1 (v0.7.0)
 
-- **#14**: Validator regex horário (aceita HH:MM, falha em HHhMM)
-- **#19**: `--skip-cache` não invalida cache existente
-- **#20**: Cost reporta API calls descartadas
-- **#22**: MATH_VALUE_MATCH duplica linhas idênticas
-- **#23**: MATH_VALUE_MATCH sem janela temporal
-- **#28**: `build_obra_overview_dossier` amostra só 50/239 eventos
+- ~~#14~~: Validator regex horário (aceita HH:MM + HHhMM + segundos)
+- ~~#19~~: `--skip-cache` invalida cache existente (force=True)
+- ~~#20~~: Cost zero quando API descartada por cache
+- ~~#22~~: MATH dedup de linhas idênticas
+- ~~#23~~: MATH janela 7d → 48h
+- ~~#28~~: Overview prioriza dias densos (top-5 + first-N + last-N)
 
-### 9.3 Pendentes (mais tarde)
+### 9.3 Resolvidas em Sessão 2 (v0.8.0)
+
+- ~~#24~~: SEMANTIC tuning (time_decay + keyword weights semantic_v2)
+- ~~#25~~: `--min-correlation-conf` threshold configurável
+- ~~#26~~: MATH distingue UNITARY / AGGREGATE / AMBIGUOUS
+- ~~#29~~: Prompt com regra de ancoragem de correlações
+- ~~#30~~: Overview inclui `correlations_sample_weak`
+
+### 9.4 Pendentes (pós-v0.8.0)
 
 - **#13**: Rename "Pagamentos" → "Discussões financeiras" no RDO (cosmética)
 - **#16**: Streaming no narrator (solução arquitetural vs fix de timeout)
-- **#24**: SEMANTIC detector tem conf média 0.50 (tuning)
-- **#25**: Correlações fracas no narrator podem confundir juiz
-- **#26**: Detector MATH diferenciar valor unitário vs agregado
 - **#27**: Detector futuro CONTRACT_RENEGOTIATION
+- **#31**: Validator `MAX_BODY_CHARS` — considerar tiers (critical vs informational)
+- **#32**: MAX_TOKENS dinâmico por scope (overview precisa de mais que day)
+- **#33**: Warning file_ids 50% em overview adversarial — diretriz pode conflitar
 
 ---
 
