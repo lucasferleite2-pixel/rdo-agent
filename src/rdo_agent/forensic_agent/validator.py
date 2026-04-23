@@ -26,7 +26,11 @@ from typing import Any
 
 # Limites para tamanho
 MIN_BODY_CHARS = 300
-MAX_BODY_CHARS = 20000
+# Sessao 2: overview com GT + adversarial + correlations pode atingir
+# 28-32k chars legitimamente. Bumpado de 20000 -> 40000. Acima disso
+# o narrador esta perdendo foco ou a obra eh grande demais (sinal pra
+# segmentar em canais).
+MAX_BODY_CHARS = 40000
 
 # Marcadores de inferencia aceitos (qualquer um conta)
 INFERENCE_MARKERS = (

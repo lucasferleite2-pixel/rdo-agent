@@ -65,7 +65,11 @@ def _select_prompt_and_version(dossier: dict) -> tuple[str, str]:
         return NARRATOR_SYSTEM_PROMPT_V3_GT, PROMPT_VERSION_GT
     return NARRATOR_SYSTEM_PROMPT_V1, PROMPT_VERSION
 TEMPERATURE: float = 0.1
-MAX_TOKENS: int = 6144
+MAX_TOKENS: int = 10240
+# Sessao 2: bumped de 6144 -> 10240 apos observar overview truncado
+# com --context --adversarial (precisa caber Verificacao GT + Contestacoes
+# Hipoteticas + Ledger + Padroes + Observacoes). Custo marginal baixo
+# (output $15/1M tokens; tokens extras so sao faturados se usados).
 ANTHROPIC_TIMEOUT_SEC: float = 300.0
 ANTHROPIC_MAX_RETRIES: int = 3
 RETRY_DELAYS_SEC: tuple[float, float] = (1.0, 3.0)
