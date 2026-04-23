@@ -21,10 +21,14 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rdo_agent.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from rdo_agent.ground_truth import GroundTruth
 
 log = get_logger(__name__)
 
@@ -276,6 +280,26 @@ def _fetch_correlations_for_day(
     return [_correlation_row_to_dict(dict(r)) for r in rows]
 
 
+def _serialize_gt(gt: GroundTruth | None) -> dict | None:
+    """
+    Serializa GroundTruth dataclass -> dict puro pronto pra JSON do
+    dossier. Remove o campo `raw` (redundante com o resto) mas preserva
+    todos os outros. Retorna None se gt eh None.
+    """
+    if gt is None:
+        return None
+    if is_dataclass(gt):
+        d = asdict(gt)
+        d.pop("raw", None)
+        return d
+    # Se vier um dict ja (ex: em teste), passa direto
+    if isinstance(gt, dict):
+        d = dict(gt)
+        d.pop("raw", None)
+        return d
+    return None
+
+
 def _fetch_correlations_summary(
     conn: sqlite3.Connection, obra: str,
 ) -> dict[str, Any]:
@@ -352,12 +376,18 @@ def _compute_context_hints(
 
 def build_day_dossier(
     conn: sqlite3.Connection, obra: str, date: str,
+    gt: GroundTruth | None = None,
 ) -> dict[str, Any]:
     """
     Monta dossier JSON do dia `date` (YYYY-MM-DD) da `obra`.
 
     Estrutura: ver secao 3.3 do briefing. Events timeline ordenada
     cronologicamente; financial_records do dia com valor em R$.
+
+    `gt` (Sprint 5 Fase C): se fornecido, injeta campo `ground_truth`
+    com GT completo (serializado) pra o narrator verificar
+    CONFORME/DIVERGENTE/NAO VERIFICAVEL. O hash do dossier muda quando
+    gt eh passado — invalida cache automaticamente.
     """
     events = _fetch_classified_events(conn, obra, date_filter=date)
     financial_records = _fetch_financial_records(conn, obra, date_filter=date)
@@ -371,7 +401,7 @@ def build_day_dossier(
     else:
         first = last = None
 
-    return {
+    dossier: dict[str, Any] = {
         "obra": obra,
         "scope": "day",
         "scope_ref": date,
@@ -382,13 +412,21 @@ def build_day_dossier(
         "context_hints": hints,
         "correlations": correlations,
     }
+    gt_dict = _serialize_gt(gt)
+    if gt_dict is not None:
+        dossier["ground_truth"] = gt_dict
+    return dossier
 
 
 def build_obra_overview_dossier(
     conn: sqlite3.Connection, obra: str,
+    gt: GroundTruth | None = None,
 ) -> dict[str, Any]:
     """
     Monta dossier JSON da obra inteira.
+
+    `gt` (Sprint 5 Fase C): se fornecido, injeta `ground_truth` no
+    dossier — narrator vai verificar corpus vs GT.
 
     Diferencas de day_dossier:
       - events_timeline: se >50 eventos, amostra representativa
@@ -468,7 +506,7 @@ def build_obra_overview_dossier(
 
     correlations_summary = _fetch_correlations_summary(conn, obra)
 
-    return {
+    dossier: dict[str, Any] = {
         "obra": obra,
         "scope": "obra_overview",
         "scope_ref": None,
@@ -482,6 +520,10 @@ def build_obra_overview_dossier(
         "context_hints": hints,
         "correlations_summary": correlations_summary,
     }
+    gt_dict = _serialize_gt(gt)
+    if gt_dict is not None:
+        dossier["ground_truth"] = gt_dict
+    return dossier
 
 
 def compute_dossier_hash(dossier: dict) -> str:

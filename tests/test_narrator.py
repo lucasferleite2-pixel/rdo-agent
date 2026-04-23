@@ -282,6 +282,51 @@ def test_narrate_auth_error_propagates(db_with_key, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def test_narrate_without_gt_uses_v2_prompt(db_with_key, monkeypatch):
+    """Sem ground_truth no dossier -> usa V1 + version v2_correlations."""
+    from rdo_agent.forensic_agent.prompts import NARRATOR_SYSTEM_PROMPT_V1
+    client = _install_fake(
+        monkeypatch, [_FakeMessage(_valid_markdown())],
+    )
+    result = narrate(_sample_dossier(), db_with_key)
+    assert result.prompt_version == PROMPT_VERSION
+    # O system prompt enviado deve ser V1 (nao V3_GT)
+    call = client.messages.calls[0]
+    assert call["system"] == NARRATOR_SYSTEM_PROMPT_V1
+
+
+def test_narrate_with_gt_switches_to_v3_prompt(db_with_key, monkeypatch):
+    """Com ground_truth no dossier -> usa V3_GT + version v3_gt."""
+    from rdo_agent.forensic_agent.narrator import PROMPT_VERSION_GT
+    from rdo_agent.forensic_agent.prompts import NARRATOR_SYSTEM_PROMPT_V3_GT
+    client = _install_fake(
+        monkeypatch, [_FakeMessage(_valid_markdown())],
+    )
+    d = _sample_dossier()
+    d["ground_truth"] = {
+        "obra_real": {"nome": "X", "contratada": "Y"},
+        "contratos": [{"id": "C1", "valor_total": 7000.0}],
+    }
+    result = narrate(d, db_with_key)
+    assert result.prompt_version == PROMPT_VERSION_GT
+    assert result.prompt_version == "narrator_v3_gt"
+    call = client.messages.calls[0]
+    assert call["system"] == NARRATOR_SYSTEM_PROMPT_V3_GT
+    # V3 eh superset de V1 — tem o conteudo adicional
+    assert "Ground Truth" in call["system"]
+
+
+def test_narrate_empty_gt_dict_still_uses_v2(db_with_key, monkeypatch):
+    """ground_truth: {} (vazio) nao ativa V3."""
+    client = _install_fake(
+        monkeypatch, [_FakeMessage(_valid_markdown())],
+    )
+    d = _sample_dossier()
+    d["ground_truth"] = {}
+    result = narrate(d, db_with_key)
+    assert result.prompt_version == PROMPT_VERSION
+
+
 def test_get_anthropic_client_raises_if_no_key(tmp_path, monkeypatch):
     settings = config.Settings(
         openai_api_key="", anthropic_api_key="",

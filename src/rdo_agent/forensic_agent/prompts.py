@@ -95,7 +95,73 @@ NARRATOR_USER_TEMPLATE = """DOSSIER:
 Produza a narrativa conforme instruções do system prompt. Escopo: {scope}."""
 
 
+# Sprint 5 Fase C — Ground Truth Injection
+# Extensão do NARRATOR_SYSTEM_PROMPT_V1 com bloco sobre Ground Truth.
+# Usada quando o dossier inclui campo `ground_truth` (fatos contratuais
+# conhecidos do operador mas ausentes do corpus WhatsApp).
+
+NARRATOR_SYSTEM_PROMPT_V3_GT = NARRATOR_SYSTEM_PROMPT_V1 + """
+
+# Ground Truth (campo `ground_truth` no dossier)
+
+O dossier inclui um campo `ground_truth` com FATOS CONTRATUAIS
+CONFIRMADOS pelo operador (ex: Lucas Fernandes Leite, representante da
+Vale Nobre). Estes fatos PODEM OU NÃO estar presentes no corpus WhatsApp
+— acordos presenciais, contratos escritos, negociações por telefone
+frequentemente não deixam rastro digital.
+
+Estrutura do `ground_truth`:
+- `obra_real`: dados oficiais (nome, CODESC, contratada etc.)
+- `canal`: id do canal + partes (parte_A, parte_B) com papéis
+- `contratos`: lista de contratos (C1, C2, …) com id, escopo,
+  valor_total, forma_pagamento, data_acordo, status
+- `pagamentos_confirmados`: pagamentos efetivamente ocorridos — cada
+  um com valor, data, hora, contrato_ref, parcela, descricao_pix
+- `pagamentos_pendentes`: ainda a pagar — valor, contrato_ref,
+  gatilho_pagamento
+- `totais`: valor_negociado_total, valor_pago_total etc.
+- `estado_atual`: snapshot do operador (obra_em_execucao, status C1/C2,
+  problemas_conhecidos)
+- `aspectos_nao_registrados_em_evidencia`: avisos explícitos sobre
+  o que NÃO está no corpus mas é verdade
+
+**Diretrizes OBRIGATÓRIAS ao usar o Ground Truth:**
+
+1. **VERIFIQUE o corpus contra o GT** — para cada asserção contratual,
+   determine se o corpus contém evidência:
+   - **CONFORME**: corpus corrobora o GT (cite os file_ids da evidência)
+   - **DIVERGENTE**: corpus contradiz o GT (cite os file_ids e EXPLIQUE
+     a discrepância — isso é um achado forense importante)
+   - **NÃO VERIFICÁVEL (apenas GT)**: GT afirma mas corpus não cobre
+     (marque explicitamente com "segundo informação complementar do
+     operador — sem evidência no canal WhatsApp")
+
+2. **USE o GT para resolver ambiguidades do corpus** — ex: se o GT
+   diz que há 2 contratos (C1=R$7.000 + C2=R$11.000) e o corpus só
+   negocia 1 valor (R$11.000), NÃO infira erradamente "contrato único
+   de R$11.000"; identifique que C1 foi fechado em canal distinto.
+
+3. **NÃO INVENTE fatos** que não estejam nem no GT nem no corpus.
+   "Não verificável" é resposta válida.
+
+4. **CITE pagamentos pelo contrato_ref** — quando o GT mapeia pagamento
+   ao contrato (ex: `contrato_ref: C1`), chame-o assim na narrativa
+   ("sinal 50% do C1", não apenas "R$3.500,00"). Isso dá rastreabilidade.
+
+5. **DESTAQUE divergências financeiras** — se `totais.valor_pago_total`
+   divergir do que o corpus sugere, ou se há `pagamentos_pendentes`,
+   mencione explicitamente em "Observações forenses".
+
+6. **Seção final obrigatória quando GT presente**: adicione
+   `## Verificação contra Ground Truth` com subseções:
+   - "Confirmado pelo canal WhatsApp" (lista)
+   - "Apenas no GT (sem evidência digital)" (lista)
+   - "Divergências detectadas" (lista; vazia se nenhuma — declare)
+"""
+
+
 __all__ = [
     "NARRATOR_SYSTEM_PROMPT_V1",
+    "NARRATOR_SYSTEM_PROMPT_V3_GT",
     "NARRATOR_USER_TEMPLATE",
 ]

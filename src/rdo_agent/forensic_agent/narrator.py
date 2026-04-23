@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 
 from rdo_agent.forensic_agent.prompts import (
     NARRATOR_SYSTEM_PROMPT_V1,
+    NARRATOR_SYSTEM_PROMPT_V3_GT,
     NARRATOR_USER_TEMPLATE,
 )
 from rdo_agent.utils import config
@@ -42,6 +43,18 @@ log = get_logger(__name__)
 
 MODEL: str = "claude-sonnet-4-6"
 PROMPT_VERSION: str = "narrator_v2_correlations"
+PROMPT_VERSION_GT: str = "narrator_v3_gt"
+
+
+def _select_prompt_and_version(dossier: dict) -> tuple[str, str]:
+    """
+    Retorna (system_prompt, prompt_version) baseado na presenca de
+    'ground_truth' no dossier. Injection-safe: se GT vazio/nulo, usa V1.
+    """
+    gt = dossier.get("ground_truth")
+    if gt:  # dict nao-vazio
+        return NARRATOR_SYSTEM_PROMPT_V3_GT, PROMPT_VERSION_GT
+    return NARRATOR_SYSTEM_PROMPT_V1, PROMPT_VERSION
 TEMPERATURE: float = 0.1
 MAX_TOKENS: int = 6144
 ANTHROPIC_TIMEOUT_SEC: float = 300.0
@@ -229,6 +242,7 @@ def _build_malformed_result(
 def _call_anthropic_with_retry(
     client, dossier_json: str, scope: str,
     conn: sqlite3.Connection, obra: str,
+    system_prompt: str = NARRATOR_SYSTEM_PROMPT_V1,
 ) -> tuple[str, int, int, int]:
     """
     Invoca Anthropic messages com retry 3x (backoff 1s + 3s).
@@ -241,7 +255,7 @@ def _call_anthropic_with_retry(
         "model": MODEL,
         "max_tokens": MAX_TOKENS,
         "temperature": TEMPERATURE,
-        "system": NARRATOR_SYSTEM_PROMPT_V1,
+        "system": system_prompt,
         "messages": [{"role": "user", "content": user_content}],
     }
     request_json = json.dumps(
@@ -358,8 +372,12 @@ def narrate(
     obra = dossier.get("obra", "")
     scope = dossier.get("scope", "")
 
+    # Fase C: se dossier tem GT injetado, usa prompt V3 + version v3_gt
+    system_prompt, prompt_version = _select_prompt_and_version(dossier)
+
     text, pt, ct, api_call_id = _call_anthropic_with_retry(
         client, dossier_json, scope, conn, obra,
+        system_prompt=system_prompt,
     )
     cost = _compute_cost_usd(pt, ct, MODEL)
 
@@ -373,7 +391,7 @@ def narrate(
         markdown_body=body,
         self_assessment=self_assessment,
         model=MODEL,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=prompt_version,
         api_call_id=api_call_id,
         cost_usd=cost,
         prompt_tokens=pt,
@@ -389,6 +407,7 @@ __all__ = [
     "MODEL",
     "PRICING_USD_PER_TOKEN",
     "PROMPT_VERSION",
+    "PROMPT_VERSION_GT",
     "NarrationResult",
     "narrate",
 ]

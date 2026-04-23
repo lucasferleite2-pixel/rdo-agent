@@ -359,6 +359,80 @@ def test_build_overview_includes_all_financial_records(db):
 # ---------------------------------------------------------------------------
 
 
+def test_build_day_dossier_without_gt_has_no_ground_truth_field(db):
+    _seed_classification_transcription(
+        db, obra="OGTN", idx=1, date="2026-04-06", text="a",
+    )
+    d = build_day_dossier(db, "OGTN", "2026-04-06")
+    assert "ground_truth" not in d
+
+
+def test_build_day_dossier_with_gt_injects_field(db):
+    from rdo_agent.ground_truth import (
+        Canal, CanalParte, Contrato, GroundTruth, ObraReal,
+    )
+    _seed_classification_transcription(
+        db, obra="OGTY", idx=1, date="2026-04-06", text="a",
+    )
+    gt = GroundTruth(
+        obra_real=ObraReal(nome="X", contratada="Y"),
+        canal=Canal(
+            id="OGTY", tipo="whatsapp",
+            parte_A=CanalParte(nome="A", papel="a"),
+            parte_B=CanalParte(nome="B", papel="b"),
+        ),
+        contratos=[
+            Contrato(id="C1", escopo="tesouras", valor_total=7000.0),
+        ],
+    )
+    d = build_day_dossier(db, "OGTY", "2026-04-06", gt=gt)
+    assert "ground_truth" in d
+    assert d["ground_truth"]["obra_real"]["nome"] == "X"
+    assert d["ground_truth"]["contratos"][0]["id"] == "C1"
+    # 'raw' nao deve aparecer (redundante)
+    assert "raw" not in d["ground_truth"]
+
+
+def test_build_overview_with_gt_injects_field(db):
+    from rdo_agent.ground_truth import (
+        Canal, CanalParte, GroundTruth, ObraReal,
+    )
+    _seed_classification_transcription(
+        db, obra="OGV", idx=1, date="2026-04-06", text="a",
+    )
+    gt = GroundTruth(
+        obra_real=ObraReal(nome="X", contratada="Y"),
+        canal=Canal(
+            id="OGV", tipo="whatsapp",
+            parte_A=CanalParte(nome="A", papel="a"),
+            parte_B=CanalParte(nome="B", papel="b"),
+        ),
+    )
+    d = build_obra_overview_dossier(db, "OGV", gt=gt)
+    assert "ground_truth" in d
+
+
+def test_dossier_hash_changes_when_gt_added(db):
+    from rdo_agent.ground_truth import (
+        Canal, CanalParte, GroundTruth, ObraReal,
+    )
+    _seed_classification_transcription(
+        db, obra="OH", idx=1, date="2026-04-06", text="a",
+    )
+    d_no_gt = build_day_dossier(db, "OH", "2026-04-06")
+    gt = GroundTruth(
+        obra_real=ObraReal(nome="X", contratada="Y"),
+        canal=Canal(
+            id="OH", tipo="whatsapp",
+            parte_A=CanalParte(nome="A", papel="a"),
+            parte_B=CanalParte(nome="B", papel="b"),
+        ),
+    )
+    d_with_gt = build_day_dossier(db, "OH", "2026-04-06", gt=gt)
+    # Hashes diferentes => cache invalidado automatico
+    assert compute_dossier_hash(d_no_gt) != compute_dossier_hash(d_with_gt)
+
+
 def test_compute_dossier_hash_deterministic():
     d1 = {"a": 1, "b": 2}
     d2 = {"b": 2, "a": 1}
