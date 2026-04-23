@@ -48,6 +48,37 @@ VALUE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Divida #26: diferenciar valor unitario (por m, por kg, cada)
+# de agregado (total, fechou em, sem qualificador). MATH nao
+# correlaciona UNITARY com financial_record (FR eh sempre agregado);
+# AMBIGUOUS recebe penalidade na confidence.
+VALUE_KIND_UNITARY = "unitary"
+VALUE_KIND_AGGREGATE = "aggregate"
+VALUE_KIND_AMBIGUOUS = "ambiguous"
+
+# Patterns que indicam valor UNITARIO (preco por unidade/medida).
+# Case-insensitive; incluem variacoes comuns em PT-BR.
+_UNITARY_PATTERNS: tuple[str, ...] = (
+    "/m", "/metro", "/kg", "/hora",
+    "por metro", "por m ", "por m.",  # "por m " evita casar "por mês"
+    "por kg", "por hora", "por dia", "por unidade",
+    "cada", "unitario", "unitário", "por cabeça",
+)
+
+# Patterns que reforcam valor AGREGADO (total, sum, fechamento).
+_AGGREGATE_PATTERNS: tuple[str, ...] = (
+    "total", "soma", "somando",
+    "fechou em", "fechamos em", "fechado em", "fechar em",
+    "ficou em", "ficar em", "sai por", "sair por",
+    "acerta em", "acertamos em", "pacote", "tudo em",
+)
+
+# Janela de contexto (chars antes/depois do match) pra classificar
+VALUE_CONTEXT_CHARS = 20
+
+# Penalidade de confidence quando o valor mencionado eh AMBIGUOUS
+AMBIGUOUS_PENALTY = 0.2
+
 # Tolerancia pra match exato: R$1 (100 centavos) — cobre arredondamentos
 # de leitura OCR/formato.
 EXACT_TOLERANCE_CENTS = 100
@@ -80,8 +111,64 @@ def parse_brl_to_cents(raw: str) -> int | None:
         return None
 
 
+def classify_value_mention(
+    text: str, start: int, end: int,
+) -> str:
+    """
+    Classifica mencao de valor como UNITARY / AGGREGATE / AMBIGUOUS
+    (divida #26) baseado em qualificadores na janela de contexto.
+
+    Regras:
+      - UNITARY_PATTERNS (exclusivo) => UNITARY
+      - AGGREGATE_PATTERNS (exclusivo) => AGGREGATE
+      - Ambos presentes => AMBIGUOUS
+      - Nenhum => AGGREGATE (default; valor sem qualificador costuma
+        ser total em negociacoes de obra)
+    """
+    if not text:
+        return VALUE_KIND_AGGREGATE
+    lo = max(0, start - VALUE_CONTEXT_CHARS)
+    hi = min(len(text), end + VALUE_CONTEXT_CHARS)
+    ctx = text[lo:hi].lower()
+    has_unit = any(p in ctx for p in _UNITARY_PATTERNS)
+    has_agg = any(p in ctx for p in _AGGREGATE_PATTERNS)
+    if has_unit and has_agg:
+        return VALUE_KIND_AMBIGUOUS
+    if has_unit:
+        return VALUE_KIND_UNITARY
+    return VALUE_KIND_AGGREGATE
+
+
+def extract_value_mentions(text: str) -> list[tuple[int, str]]:
+    """
+    Retorna [(cents, kind), ...] — valores + classificacao unit/agg/amb.
+    Valores duplicados (mesmo cents + mesmo kind) sao deduplicados.
+    """
+    if not text:
+        return []
+    seen: set[tuple[int, str]] = set()
+    out: list[tuple[int, str]] = []
+    for m in VALUE_RE.finditer(text):
+        cents = parse_brl_to_cents(m.group(1))
+        if cents is None or cents <= 0:
+            continue
+        kind = classify_value_mention(text, m.start(), m.end())
+        key = (cents, kind)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append((cents, kind))
+    return out
+
+
 def extract_values_cents(text: str) -> list[int]:
-    """Retorna lista de valores (em centavos) mencionados no texto via R$."""
+    """
+    Retorna lista de valores (em centavos) mencionados no texto via R$.
+
+    Retrocompat: API antiga que ignora o kind. Preserva ordem de
+    primeira aparicao e **inclui duplicatas** no mesmo texto (o caller
+    pode precisar). Para uso novo prefira `extract_value_mentions`.
+    """
     if not text:
         return []
     values: list[int] = []
@@ -137,22 +224,19 @@ def detect_math_relations(
     if not events:
         return []
 
-    # Pre-extrai valores de cada classification. Divida #22: dedup
-    # dentro da mesma cls — mencao duplicada do mesmo valor nao deve
-    # emitir 2 Correlations identicas (ex: "R$3.500,00 ... R$3500"
-    # na mesma transcricao).
-    event_values: list[tuple[int, list[int]]] = []
+    # Pre-extrai (valor, kind) de cada classification. extract_value_mentions
+    # ja dedupa (cents, kind) — divida #22 resolvida automaticamente.
+    # Divida #26: ignoramos UNITARY aqui porque financial_record eh
+    # sempre valor agregado (um PIX pago); um "R\$50/metro" nao pode
+    # bater com o valor pago em um PIX.
+    event_mentions: list[tuple[int, list[tuple[int, str]]]] = []
     for i, ev in enumerate(events):
-        raw = extract_values_cents(ev.text)
-        if raw:
-            # preserva ordem de primeira aparicao, mas unique
-            seen: set[int] = set()
-            uniq: list[int] = []
-            for v in raw:
-                if v not in seen:
-                    seen.add(v)
-                    uniq.append(v)
-            event_values.append((i, uniq))
+        mentions = [
+            (cents, kind) for cents, kind in extract_value_mentions(ev.text)
+            if kind != VALUE_KIND_UNITARY
+        ]
+        if mentions:
+            event_mentions.append((i, mentions))
 
     out: list[Correlation] = []
     for fr in frs:
@@ -160,20 +244,28 @@ def detect_math_relations(
         hi = fr.timestamp + WINDOW
         target = fr.valor_centavos
         assert target is not None  # garantido pelo filtro acima
-        for idx, values in event_values:
+        for idx, mentions in event_mentions:
             ev = events[idx]
             if ev.timestamp < lo or ev.timestamp > hi:
                 continue
             # Uma classification pode mencionar varios valores — emite
             # uma Correlation por valor que bate.
-            for v in values:
+            for v, kind in mentions:
                 result = _classify_match(v, target)
                 if result is None:
                     continue
                 ctype, confidence = result
+                # Divida #26: AMBIGUOUS mentions recebem penalidade
+                # (nao temos certeza se o valor mencionado eh total).
+                if kind == VALUE_KIND_AMBIGUOUS:
+                    confidence = max(0.0, confidence - AMBIGUOUS_PENALTY)
                 delta = int((ev.timestamp - fr.timestamp).total_seconds())
                 mentioned_brl = v / 100
                 target_brl = target / 100
+                kind_tag = (
+                    f" [kind={kind}]"
+                    if kind != VALUE_KIND_AGGREGATE else ""
+                )
                 out.append(Correlation(
                     obra=obra,
                     correlation_type=ctype,
@@ -186,6 +278,7 @@ def detect_math_relations(
                     rationale=(
                         f"valor mencionado R${mentioned_brl:.2f} vs pago "
                         f"R${target_brl:.2f} (delta={delta:+d}s)"
+                        f"{kind_tag}"
                     ),
                     detected_by=DETECTOR_ID,
                 ))
@@ -193,13 +286,20 @@ def detect_math_relations(
 
 
 __all__ = [
+    "AMBIGUOUS_PENALTY",
     "DETECTOR_ID",
     "DIVERGENCE_LOWER",
     "DIVERGENCE_UPPER",
     "EXACT_TOLERANCE_CENTS",
+    "VALUE_CONTEXT_CHARS",
+    "VALUE_KIND_AGGREGATE",
+    "VALUE_KIND_AMBIGUOUS",
+    "VALUE_KIND_UNITARY",
     "VALUE_RE",
     "WINDOW",
+    "classify_value_mention",
     "detect_math_relations",
+    "extract_value_mentions",
     "extract_values_cents",
     "parse_brl_to_cents",
 ]
