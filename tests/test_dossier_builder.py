@@ -359,6 +359,98 @@ def test_build_overview_includes_all_financial_records(db):
 # ---------------------------------------------------------------------------
 
 
+def test_build_day_dossier_min_correlation_conf_filters(db):
+    """Divida #25: threshold remove correlations abaixo."""
+    import sqlite3
+    # Seed 1 classification + 1 fr + duas correlations (conf 0.5 e 0.9)
+    _seed_classification_transcription(
+        db, obra="OTH", idx=1, date="2026-04-06", text="evento",
+    )
+    _seed_financial_record(
+        db, obra="OTH", idx=1, date="2026-04-06",
+        valor_centavos=100000, descricao="sinal",
+    )
+    now = "2026-04-22T00:00:00Z"
+    cls_id = db.execute(
+        "SELECT id FROM classifications WHERE obra='OTH'"
+    ).fetchone()["id"]
+    fr_id = db.execute(
+        "SELECT id FROM financial_records WHERE obra='OTH'"
+    ).fetchone()["id"]
+    db.execute(
+        """INSERT INTO correlations (obra, correlation_type,
+        primary_event_ref, primary_event_source,
+        related_event_ref, related_event_source, time_gap_seconds,
+        confidence, rationale, detected_by, created_at)
+        VALUES ('OTH', 'SEMANTIC_PAYMENT_SCOPE', ?, 'financial_record',
+                ?, 'classification', 0, 0.5, 'weak', 'x', ?)""",
+        (f"fr_{fr_id}", f"c_{cls_id}", now),
+    )
+    db.execute(
+        """INSERT INTO correlations (obra, correlation_type,
+        primary_event_ref, primary_event_source,
+        related_event_ref, related_event_source, time_gap_seconds,
+        confidence, rationale, detected_by, created_at)
+        VALUES ('OTH', 'MATH_VALUE_MATCH', ?, 'financial_record',
+                ?, 'classification', 0, 0.9, 'strong', 'x', ?)""",
+        (f"fr_{fr_id}", f"c_{cls_id}", now),
+    )
+    db.commit()
+
+    d_all = build_day_dossier(db, "OTH", "2026-04-06")
+    assert len(d_all["correlations"]) == 2
+
+    d_filtered = build_day_dossier(
+        db, "OTH", "2026-04-06", min_correlation_confidence=0.70,
+    )
+    assert len(d_filtered["correlations"]) == 1
+    assert d_filtered["correlations"][0]["confidence"] == 0.9
+
+    d_strict = build_day_dossier(
+        db, "OTH", "2026-04-06", min_correlation_confidence=0.95,
+    )
+    assert d_strict["correlations"] == []
+
+
+def test_build_overview_min_correlation_conf_filters(db):
+    _seed_classification_transcription(
+        db, obra="OTHV", idx=1, date="2026-04-06", text="e",
+    )
+    _seed_financial_record(
+        db, obra="OTHV", idx=1, date="2026-04-06",
+        valor_centavos=100000, descricao="sinal",
+    )
+    now = "2026-04-22T00:00:00Z"
+    db.execute(
+        """INSERT INTO correlations (obra, correlation_type,
+        primary_event_ref, primary_event_source,
+        related_event_ref, related_event_source, time_gap_seconds,
+        confidence, rationale, detected_by, created_at)
+        VALUES ('OTHV', 'SEMANTIC_PAYMENT_SCOPE', 'fr_1', 'financial_record',
+                'c_1', 'classification', 0, 0.4, 'weak', 'x', ?)""",
+        (now,),
+    )
+    db.execute(
+        """INSERT INTO correlations (obra, correlation_type,
+        primary_event_ref, primary_event_source,
+        related_event_ref, related_event_source, time_gap_seconds,
+        confidence, rationale, detected_by, created_at)
+        VALUES ('OTHV', 'MATH_VALUE_MATCH', 'fr_1', 'financial_record',
+                'c_1', 'classification', 0, 0.9, 'strong', 'x', ?)""",
+        (now,),
+    )
+    db.commit()
+
+    d_all = build_obra_overview_dossier(db, "OTHV")
+    assert d_all["correlations_summary"]["total"] == 2
+
+    d_filt = build_obra_overview_dossier(
+        db, "OTHV", min_correlation_confidence=0.70,
+    )
+    # Filtro aplicado antes de compor summary
+    assert d_filt["correlations_summary"]["total"] == 1
+
+
 def test_build_day_dossier_without_gt_has_no_ground_truth_field(db):
     _seed_classification_transcription(
         db, obra="OGTN", idx=1, date="2026-04-06", text="a",

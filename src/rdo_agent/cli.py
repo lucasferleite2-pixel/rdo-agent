@@ -823,10 +823,23 @@ def review(obra: str) -> None:
         "NAO VERIFICAVEL. Invalida cache automaticamente (hash muda)."
     ),
 )
+@click.option(
+    "--min-correlation-conf",
+    "min_correlation_conf",
+    type=click.FloatRange(0.0, 1.0),
+    default=0.70,
+    show_default=True,
+    help=(
+        "Threshold de confidence minimo para correlacoes injetadas no "
+        "dossier (divida #25). Ex: 0.80 remove correlacoes de atencao, "
+        "deixando so alta confianca. 0.0 inclui tudo."
+    ),
+)
 def narrate_cmd(
     obra: str, dia: str | None, scope: str | None,
     skip_cache: bool, reports_root: str,
     context_path: Path | None,
+    min_correlation_conf: float,
 ) -> None:
     """Gera narrativa forense (Sprint 5 Fase A+C) via agente Sonnet 4.6."""
     from rdo_agent.forensic_agent import (
@@ -909,9 +922,15 @@ def narrate_cmd(
             f"obra={obra} scope={sc} ref={ref or '(overview)'}"
         )
         if sc == "day":
-            dossier = build_day_dossier(conn, obra, ref, gt=gt)
+            dossier = build_day_dossier(
+                conn, obra, ref, gt=gt,
+                min_correlation_confidence=min_correlation_conf,
+            )
         else:
-            dossier = build_obra_overview_dossier(conn, obra, gt=gt)
+            dossier = build_obra_overview_dossier(
+                conn, obra, gt=gt,
+                min_correlation_confidence=min_correlation_conf,
+            )
 
         events_count = dossier["statistics"]["events_total"]
         if events_count == 0:

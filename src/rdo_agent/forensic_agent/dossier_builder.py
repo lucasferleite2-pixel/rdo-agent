@@ -250,11 +250,16 @@ def _correlation_row_to_dict(r: dict | sqlite3.Row) -> dict[str, Any]:
 def _fetch_correlations_for_day(
     conn: sqlite3.Connection, obra: str, date: str,
     day_events: list[dict],
+    min_correlation_confidence: float = 0.0,
 ) -> list[dict]:
     """
     Correlacoes onde primary OU related referencia:
       - um financial_record cujo data_transacao == date, OU
       - uma classification presente em `day_events` (mesmo dia)
+
+    Divida #25: filtra por `min_correlation_confidence` pra nao injetar
+    correlacoes fracas (que poluem o narrator). Default 0.0 preserva
+    comportamento antigo pra callers programaticos; CLI usa 0.70.
 
     Ordenadas por confidence desc.
     """
@@ -271,12 +276,13 @@ def _fetch_correlations_for_day(
         return []
     placeholders = ",".join("?" * len(all_refs))
     sql = (
-        f"SELECT * FROM correlations WHERE obra = ? AND "
-        f"(primary_event_ref IN ({placeholders}) "
+        f"SELECT * FROM correlations WHERE obra = ? AND confidence >= ? "
+        f"AND (primary_event_ref IN ({placeholders}) "
         f"OR related_event_ref IN ({placeholders})) "
         f"ORDER BY confidence DESC"
     )
-    rows = conn.execute(sql, (obra, *all_refs, *all_refs)).fetchall()
+    params = (obra, min_correlation_confidence, *all_refs, *all_refs)
+    rows = conn.execute(sql, params).fetchall()
     return [_correlation_row_to_dict(dict(r)) for r in rows]
 
 
@@ -302,12 +308,18 @@ def _serialize_gt(gt: GroundTruth | None) -> dict | None:
 
 def _fetch_correlations_summary(
     conn: sqlite3.Connection, obra: str,
+    min_correlation_confidence: float = 0.0,
 ) -> dict[str, Any]:
-    """Resumo da obra: total, breakdown por tipo, top validadas."""
+    """
+    Resumo da obra: total, breakdown por tipo, top validadas.
+
+    Divida #25: `min_correlation_confidence` filtra antes de classificar.
+    Default 0.0 mantem retrocompat; CLI usa 0.70.
+    """
     rows = [dict(r) for r in conn.execute(
-        "SELECT * FROM correlations WHERE obra = ? "
+        "SELECT * FROM correlations WHERE obra = ? AND confidence >= ? "
         "ORDER BY confidence DESC",
-        (obra,),
+        (obra, min_correlation_confidence),
     ).fetchall()]
     by_type: dict[str, int] = {}
     for r in rows:
@@ -377,6 +389,7 @@ def _compute_context_hints(
 def build_day_dossier(
     conn: sqlite3.Connection, obra: str, date: str,
     gt: GroundTruth | None = None,
+    min_correlation_confidence: float = 0.0,
 ) -> dict[str, Any]:
     """
     Monta dossier JSON do dia `date` (YYYY-MM-DD) da `obra`.
@@ -388,12 +401,19 @@ def build_day_dossier(
     com GT completo (serializado) pra o narrator verificar
     CONFORME/DIVERGENTE/NAO VERIFICAVEL. O hash do dossier muda quando
     gt eh passado — invalida cache automaticamente.
+
+    `min_correlation_confidence` (#25): filtra correlacoes fracas
+    antes de injetar no dossier. Default 0.0 preserva retrocompat;
+    CLI `--min-correlation-conf` usa 0.70.
     """
     events = _fetch_classified_events(conn, obra, date_filter=date)
     financial_records = _fetch_financial_records(conn, obra, date_filter=date)
     stats = _compute_statistics(events)
     hints = _compute_context_hints(events, financial_records)
-    correlations = _fetch_correlations_for_day(conn, obra, date, events)
+    correlations = _fetch_correlations_for_day(
+        conn, obra, date, events,
+        min_correlation_confidence=min_correlation_confidence,
+    )
 
     if events:
         first = events[0]["timestamp"]
@@ -411,6 +431,7 @@ def build_day_dossier(
         "events_timeline": events,
         "context_hints": hints,
         "correlations": correlations,
+        "min_correlation_confidence": min_correlation_confidence,
     }
     gt_dict = _serialize_gt(gt)
     if gt_dict is not None:
@@ -421,12 +442,16 @@ def build_day_dossier(
 def build_obra_overview_dossier(
     conn: sqlite3.Connection, obra: str,
     gt: GroundTruth | None = None,
+    min_correlation_confidence: float = 0.0,
 ) -> dict[str, Any]:
     """
     Monta dossier JSON da obra inteira.
 
     `gt` (Sprint 5 Fase C): se fornecido, injeta `ground_truth` no
     dossier — narrator vai verificar corpus vs GT.
+
+    `min_correlation_confidence` (#25): filtra correlacoes fracas
+    antes de injetar no summary. Default 0.0 preserva retrocompat.
 
     Diferencas de day_dossier:
       - events_timeline: se >50 eventos, amostra representativa
@@ -504,7 +529,10 @@ def build_obra_overview_dossier(
     else:
         first = last = None
 
-    correlations_summary = _fetch_correlations_summary(conn, obra)
+    correlations_summary = _fetch_correlations_summary(
+        conn, obra,
+        min_correlation_confidence=min_correlation_confidence,
+    )
 
     dossier: dict[str, Any] = {
         "obra": obra,
@@ -519,6 +547,7 @@ def build_obra_overview_dossier(
         "daily_summaries": daily_summaries,
         "context_hints": hints,
         "correlations_summary": correlations_summary,
+        "min_correlation_confidence": min_correlation_confidence,
     }
     gt_dict = _serialize_gt(gt)
     if gt_dict is not None:
