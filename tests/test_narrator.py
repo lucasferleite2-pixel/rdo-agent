@@ -309,7 +309,7 @@ def test_narrate_with_gt_switches_to_v3_prompt(db_with_key, monkeypatch):
     }
     result = narrate(d, db_with_key)
     assert result.prompt_version == PROMPT_VERSION_GT
-    assert result.prompt_version == "narrator_v3_gt"
+    assert result.prompt_version == "narrator_v3_1_anchoring"
     call = client.messages.calls[0]
     assert call["system"] == NARRATOR_SYSTEM_PROMPT_V3_GT
     # V3 eh superset de V1 — tem o conteudo adicional

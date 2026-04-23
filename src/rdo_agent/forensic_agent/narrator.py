@@ -42,8 +42,8 @@ from rdo_agent.utils.logging import get_logger
 log = get_logger(__name__)
 
 MODEL: str = "claude-sonnet-4-6"
-PROMPT_VERSION: str = "narrator_v2_correlations"
-PROMPT_VERSION_GT: str = "narrator_v3_gt"
+PROMPT_VERSION: str = "narrator_v2_1_anchoring"
+PROMPT_VERSION_GT: str = "narrator_v3_1_anchoring"
 
 
 def _select_prompt_and_version(dossier: dict) -> tuple[str, str]:
