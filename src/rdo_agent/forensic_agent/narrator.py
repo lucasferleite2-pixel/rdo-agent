@@ -44,7 +44,7 @@ MODEL: str = "claude-sonnet-4-6"
 PROMPT_VERSION: str = "narrator_v1"
 TEMPERATURE: float = 0.1
 MAX_TOKENS: int = 4096
-ANTHROPIC_TIMEOUT_SEC: float = 60.0
+ANTHROPIC_TIMEOUT_SEC: float = 300.0
 ANTHROPIC_MAX_RETRIES: int = 3
 RETRY_DELAYS_SEC: tuple[float, float] = (1.0, 3.0)
 
