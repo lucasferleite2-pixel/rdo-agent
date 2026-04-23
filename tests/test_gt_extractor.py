@@ -201,6 +201,169 @@ def test_write_gt_yaml_prunes_none_fields(tmp_path):
     assert "nome: X" in content
 
 
+# ---------------------------------------------------------------------------
+# run_adaptive_interview — Fase D2
+# ---------------------------------------------------------------------------
+
+
+class _FakeTextBlock:
+    def __init__(self, text: str):
+        self.type = "text"
+        self.text = text
+
+
+class _FakeResponse:
+    def __init__(self, text: str):
+        self.content = [_FakeTextBlock(text)]
+
+
+class _FakeAnthropicMessages:
+    """Espelha .messages.create() do SDK anthropic."""
+
+    def __init__(self, queue: list[str]):
+        self._queue = list(queue)
+        self.calls: list[dict] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        text = self._queue.pop(0)
+        return _FakeResponse(text)
+
+
+def _scripted_turn(
+    fragment: dict, question: str = "", is_complete: bool = False,
+    notes: str | None = None,
+) -> str:
+    """Gera o text bruto de uma resposta do Claude (com bloco JSON)."""
+    import json as _j
+    payload = {
+        "next_question": question,
+        "accumulated_yaml_fragment": fragment,
+        "is_complete": is_complete,
+    }
+    if notes:
+        payload["notes_for_operator"] = notes
+    return f"```json\n{_j.dumps(payload, ensure_ascii=False)}\n```"
+
+
+def test_deep_merge_nested_dicts():
+    from rdo_agent.gt_extractor.adaptive import _deep_merge
+    a = {"obra_real": {"nome": "X"}}
+    b = {"obra_real": {"contratada": "Y"}, "canal": {"id": "C"}}
+    merged = _deep_merge(dict(a), b)
+    assert merged["obra_real"] == {"nome": "X", "contratada": "Y"}
+    assert merged["canal"] == {"id": "C"}
+
+
+def test_deep_merge_lists_concat_with_id_dedup():
+    from rdo_agent.gt_extractor.adaptive import _deep_merge
+    a = {"contratos": [{"id": "C1", "valor_total": 7000}]}
+    b = {"contratos": [
+        {"id": "C1", "status": "quitado"},   # mesmo id => ignorado
+        {"id": "C2", "valor_total": 11000},  # novo id => adicionado
+    ]}
+    merged = _deep_merge(dict(a), b)
+    assert len(merged["contratos"]) == 2
+    ids = [c["id"] for c in merged["contratos"]]
+    assert ids == ["C1", "C2"]
+
+
+def test_extract_json_block_fenced():
+    from rdo_agent.gt_extractor.adaptive import _extract_json_block
+    text = 'preambulo... ```json\n{"is_complete": true}\n``` fim'
+    assert _extract_json_block(text) == {"is_complete": true_or_py()}
+
+
+def true_or_py():
+    return True  # helper pra evitar linter warnings sem afetar comportamento
+
+
+def test_extract_json_block_no_fence():
+    from rdo_agent.gt_extractor.adaptive import _extract_json_block
+    text = 'lixo {"a": 1, "b": 2} mais lixo'
+    assert _extract_json_block(text) == {"a": 1, "b": 2}
+
+
+def test_extract_json_block_invalid_returns_none():
+    from rdo_agent.gt_extractor.adaptive import _extract_json_block
+    assert _extract_json_block("sem json aqui") is None
+
+
+def test_run_adaptive_interview_minimal_flow(tmp_path):
+    from rdo_agent.gt_extractor import run_adaptive_interview
+    # Turno 1: pergunta obra_real.nome, operador responde "Reforma X"
+    # Turno 2: pergunta contratada, operador responde "Y Ltda"
+    # Turno 3: pergunta canal.id, operador responde "CANAL1"
+    # Turno 4: pergunta parte_A, operador "Lucas,representante_empresa"
+    # Turno 5: completa com todos os fragments
+    fake = _FakeAnthropicMessages([
+        _scripted_turn(
+            fragment={"obra_real": {"nome": "Reforma X"}},
+            question="Qual o nome da obra?",
+        ),
+        _scripted_turn(
+            fragment={"obra_real": {"contratada": "Y Ltda"}},
+            question="Qual empresa contratada?",
+        ),
+        _scripted_turn(
+            fragment={"canal": {"id": "CANAL1", "tipo": "whatsapp"}},
+            question="Qual id do canal?",
+        ),
+        _scripted_turn(
+            fragment={
+                "canal": {
+                    "parte_A": {"nome": "Lucas", "papel": "representante_empresa"},
+                    "parte_B": {"nome": "Everaldo", "papel": "prestador_servico"},
+                },
+            },
+            question="Quem sao as partes do canal?",
+        ),
+        _scripted_turn(
+            fragment={},
+            question="",
+            is_complete=True,
+        ),
+    ])
+
+    responses = [
+        "Reforma X",
+        "Y Ltda",
+        "CANAL1",
+        "Lucas (A) e Everaldo (B)",
+    ]
+    captured, output_fn = _collect_output()
+    inp = InterviewInput(
+        obra="CANAL1",
+        output_path=tmp_path / "gt.yml",
+        input_fn=_make_scripted_input(responses),
+        output_fn=output_fn,
+    )
+    gt = run_adaptive_interview(inp, client=fake)
+    assert gt.obra_real.nome == "Reforma X"
+    assert gt.obra_real.contratada == "Y Ltda"
+    assert gt.canal.id == "CANAL1"
+    assert gt.canal.parte_A.nome == "Lucas"
+    # A chamada passou os 4 turnos antes do is_complete
+    assert len(fake.calls) == 5
+
+
+def test_run_adaptive_interview_invalid_json_raises(tmp_path):
+    """Claude retorna texto sem JSON parseavel => AdaptiveInterviewError."""
+    from rdo_agent.gt_extractor import (
+        AdaptiveInterviewError, run_adaptive_interview,
+    )
+    fake = _FakeAnthropicMessages(["sem json aqui, so prosa"])
+    captured, output_fn = _collect_output()
+    inp = InterviewInput(
+        obra="X",
+        output_path=tmp_path / "gt.yml",
+        input_fn=_make_scripted_input([]),
+        output_fn=output_fn,
+    )
+    with pytest.raises(AdaptiveInterviewError):
+        run_adaptive_interview(inp, client=fake, max_turns=1)
+
+
 def test_write_gt_yaml_creates_parent_dirs(tmp_path):
     from rdo_agent.ground_truth import (
         Canal, CanalParte, GroundTruth, ObraReal,

@@ -24,6 +24,11 @@ e podem ser serializadas via `write_ground_truth_yaml(gt, path)`.
 
 from __future__ import annotations
 
+from rdo_agent.gt_extractor.adaptive import (
+    AdaptiveInterviewError,
+    AdaptiveTurn,
+    run_adaptive_interview,
+)
 from rdo_agent.gt_extractor.interview import (
     InterviewInput,
     InterviewSkipped,
@@ -34,8 +39,11 @@ from rdo_agent.gt_extractor.yaml_writer import (
 )
 
 __all__ = [
+    "AdaptiveInterviewError",
+    "AdaptiveTurn",
     "InterviewInput",
     "InterviewSkipped",
+    "run_adaptive_interview",
     "run_simple_interview",
     "write_ground_truth_yaml",
 ]
