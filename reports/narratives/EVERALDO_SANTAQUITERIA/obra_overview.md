@@ -1,115 +1,123 @@
-# Narrativa: EVERALDO_SANTAQUITERIA — Obra Overview (04/04/2026 a 16/04/2026)
+# Narrativa: EVERALDO_SANTAQUITERIA — Obra Overview
+
+## Sumário Executivo
+
+O canal WhatsApp identificado como EVERALDO_SANTAQUITERIA registra a comunicação entre Lucas Fernandes Leite (representante da Construtora e Imobiliária Vale Nobre Ltda) e Everaldo Caitano Baia (serralheiro prestador de serviço) no contexto da **Reforma da Escola Estadual Povoado de Santa Quitéria** (CODESC 75817, município de Santana do Manhuaçu/MG, contratante público SEE-MG / SRE Manhuaçu). O corpus cobre o período de **4 a 16 de abril de 2026**, totalizando 239 eventos classificados (195 amostrados neste dossier), distribuídos em 11 dias de comunicação ativa. O volume é expressivo — com picos de 48 eventos em 08/04 e 52 em 15/04 — e o conteúdo é dominado por negociação comercial, especificação técnica, reporte de execução e pagamentos, com substancial ruído off-topic. Dois contratos foram firmados no período (C1 e C2), quatro transferências PIX foram realizadas, e a obra permanecia em execução ao momento do snapshot do operador (23/04/2026).
 
 ---
 
-## 1. Sumário Executivo
+## Cronologia em Bloco
 
-O dossier cobre 13 dias de comunicação via WhatsApp entre a **CONSTRUTORA E IMOBILIARIA VALE NOBRE LTD** (representada pelo interlocutor identificado como "Lucas") e o serralherio **Everaldo Caitano Baia**, no período de **4 de abril a 16 de abril de 2026**. Foram registrados **239 eventos** no total (195 amostrados neste dossier), distribuídos entre transcrições de áudio (117), mensagens de texto (78) e análises visuais (44). O objeto central do contrato é a **execução de serviços de serralheria** em uma edificação identificada como Escola Estadual Povoado de Santa Quitéria, compreendendo subida e instalação de tesouras e terças do telhado, ripamento, fechamento lateral e frontal, e instalação de alambrado. O período registra desde a negociação inicial do contrato até a fase de execução avançada, com quatro pagamentos via PIX totalizando **R$ 12.530,00**.
+### Bloco 1 — Abertura da Negociação e Impasse Inicial (04/04/2026)
 
----
+O dia 4 de abril é o mais denso em termos narrativos: 37 eventos, com arco que vai da apresentação do escopo à negociação intensa e ao pré-acordo verbal. Às 11h48, Everaldo Caitano Baia já se encontrava em outro serviço e sinalizou que ligaria ao interlocutor ao terminar (f_22e21dda92e2). À tarde, às 15h48, iniciou-se a discussão técnica sobre o escopo: colocação de tesouras, ripamento e fechamento (f_8a79177d6646). Às 16h12, Lucas Fernandes Leite enviou ao canal o arquivo "ESCOLA ESTADUAL POOVOADO DE SANTA QUITERIA FOLHA 02-Model.pdf" (m_11ecc90fd074), sugerindo que a planta ou projeto da obra foi compartilhado neste momento como referência para o orçamento.
 
-## 2. Cronologia por Marco
+A partir das 16h16, a conversa técnica se aprofundou: discutiu-se se a tela de fechamento estava incluída no escopo ou era item separado (f_d74291d5609d; m_36afc1062203). Everaldo Caitano Baia esclareceu que a tela seria separada e que o orçamento cobriria apenas telhado e fechamento estrutural (f_14819610a954). Lucas Fernandes Leite confirmou: "Vamos combinar só no telhado e no fechamento então" (m_59549b1cc373), com Everaldo Caitano Baia concordando (f_1d2f1aaf3319).
 
-### Marco I — Negociação e Estabelecimento do Contrato (04/04/2026)
+À noite, a negociação de valores se intensificou. Às 19h36, Everaldo Caitano Baia apresentou sua proposta inicial de **R$12.000,00** para o serviço completo de fechamento e telhado (f_5698c4479dc7). Às 20h43, ele próprio recuou para **R$11.000,00**, justificando que havia pago material (f_386aa52c2bc2). Lucas Fernandes Leite, às 22h06, sinalizou resistência ao modelo de pagamento proposto — exigindo metade adiantada antes do início — e explicou a lógica de pagamento por etapa: metade ao colocar o pé na obra, metade ao finalizar (f_e3958cb0696e). Everaldo Caitano Baia, às 22h06, respondeu que só trabalharia com sinal (f_8bad08231b6a). O dia encerrou sem acordo formal, mas com as partes alinhadas em torno de R$11.000,00 e do modelo 50/50.
 
-O dia 4 de abril foi o mais denso em negociação comercial, com 37 eventos registrados. A conversa se inicia às 11h48 com Everaldo Caitano Baia informando que sua equipe trabalha em dupla e que está concluindo outro serviço antes de se deslocar (f_22e21dda92e2). A tarde traz o primeiro contato substantivo: às 15h48, Everaldo Caitano Baia apresenta uma proposta verbal para colocar as tesouras no lugar, deixar ripado e tampado (f_8a79177d6646). Às 16h12, Lucas envia o arquivo PDF da planta da escola — "ESCOLA ESTADUAL POOVOADO DE SANTA QUITERIA FOLHA 02" (m_11ecc90fd074) —, estabelecendo o referencial técnico da obra.
-
-A partir daí, a negociação entra em ritmo acelerado. Às 16h16, discute-se se o fechamento inclui tela ou se esta é responsabilidade de terceiros (f_d74291d5609d), com Lucas confirmando às 16h20 que "a tela é separado" (m_36afc1062203). Às 16h32, Lucas delimita o escopo: "Vamos combinar só no telhado e no fechamento então" (m_59549b1cc373), ao que Everaldo Caitano Baia concorda. O escopo da moldura de tela fica reservado para negociação futura (m_4ac8de60cb0e).
-
-À noite, a negociação de valores se intensifica. Às 19h36, Everaldo Caitano Baia propõe **R$ 12.000,00** pelo fechamento completo, telhado e tesouras (f_5698c4479dc7). Às 20h43, ele mesmo recua para **R$ 11.000,00**, justificando que já havia pago pelo material (f_386aa52c2bc2). Às 21h07, propõe início na terça-feira (f_8dfdf438faf4). Às 22h04, Everaldo Caitano Baia condiciona o início ao recebimento de metade do valor (f_0d6a53e08f06). Às 22h13, Lucas formaliza verbalmente a estrutura de pagamento: "terça na hora que você botou o pé lá dentro, eu já te faço o fixo da metade, a outra metade na hora que você finalizar" (f_e3958cb0696e). O dia encerra com as partes alinhadas em princípio, mas sem valor final fechado.
-
-### Marco II — Reabertura da Negociação e Fechamento Definitivo (08/04/2026)
-
-O dia 8 de abril foi o segundo mais movimentado (48 eventos) e representa o ponto de inflexão contratual. Pela manhã, Everaldo Caitano Baia retoma a discussão de valores, alegando que os R$ 11.000,00 não cobrem o fechamento lateral (f_9f1926960841, f_4a5b4347572f). Ele detalha que cobra R$ 50,00 por metro e que o total extrapolaria o combinado (f_c9e008c74a4c). Lucas reage: "Você não tinha falado comigo que você ia fazer 11 mil e tudo?" (f_9f1926960841).
-
-Às 09h03, Everaldo Caitano Baia revela sua margem real: "eu tenho só sete mil" disponíveis para o telhado (f_c9073788ceac). Às 09h06, menciona explicitamente o valor de R$ 3.500,00 como referência de pagamento parcial (f_074d548629aa). Às 09h11, Lucas aceita a proposta reformulada: "Top, desse jeito tá certo pra mim, pode ser, vamos fechar desse jeito" (f_ac90b14619ba). Uma mensagem é apagada às 09h13 (m_d7125269cd5b) — ponto de atenção forense.
-
-À noite, nova rodada de negociação. Às 20h26, Everaldo Caitano Baia propõe fechar em **R$ 10.000,00** pelo serviço lateral, reconhecendo que ficará no prejuízo (f_4604a0918d3e). Às 20h31, Lucas oferece **R$ 5.000,00** de entrada imediata para fechar em R$ 10.000,00 (f_6b289ad150a3). Às 20h36, Lucas reformula: "vamos fechar nos 11 então, só que eu vou te pagar junto com os R$ 3.500 que eu vou te pagar no final do ripamento, aí eu te pago os R$ 3.500 mais os R$ 5.500 do outro" (f_5fa1642121f7). Às 20h38, Everaldo Caitano Baia pede que Lucas mande apenas R$ 3.000,00 de entrada, não os R$ 5.000,00, pois repassaria R$ 2.000,00 a um colaborador (f_8818a3e9ce31). Às 20h39, Lucas confirma: "Fechado" (m_2bc09ed4e365). O contrato está estabelecido.
-
-Everaldo Caitano Baia planeja iniciar na quinta-feira (09/04), trabalhar quinta e sexta, e possivelmente sábado (f_74dc8c677f7f). Afirma que a equipe é rápida e que não faltará material (f_cc41abc4b46b).
-
-### Marco III — Primeiro Pagamento e Início da Execução (06/04/2026 e 09/04/2026)
-
-Em **6 de abril de 2026 às 11h13**, a CONSTRUTORA E IMOBILIARIA VALE NOBRE LTD realizou o primeiro PIX de **R$ 3.500,00** para Everaldo Caitano Baia, com descrição explícita: *"50% de sinal do serviço de serralheria (subir e instalar tesouras e terças do telhado e fechamento)"* (f_7d3f788778ab). Este pagamento é corroborado por correlação temporal validada: 215 segundos antes do PIX, houve mensagem com múltiplas keywords de pagamento (correlação TEMPORAL_PAYMENT_CONTEXT, confidence 1,0, ref. fr_1/c_131). Adicionalmente, correlações semânticas validadas (confidence 0,80) ligam este pagamento às negociações de 04/04 sobre "serviço, telhado, tesoura, terça" (c_3, c_9, c_16), confirmando que o PIX de R$ 3.500,00 corresponde ao sinal de 50% do serviço de serralheria acordado verbalmente naquele dia.
-
-O dia 9 de abril (não amostrado em detalhe, mas presente nos resumos diários com 17 eventos de cronograma e reporte de execução) sugere que Everaldo Caitano Baia iniciou os trabalhos conforme combinado.
-
-### Marco IV — Segundo Pagamento, Levantamento de Material e Execução do Telhado (10/04/2026)
-
-Em **10 de abril de 2026 às 12h42**, foi realizado o segundo PIX de **R$ 3.500,00** para Everaldo Caitano Baia, sem descrição registrada (f_56bd10688411). A correlação MATH_VALUE_MATCH (confidence 1,0) vincula este pagamento à menção explícita de R$ 3.500,00 feita por Everaldo Caitano Baia em 08/04 às 20h36 (c_60), quando o valor foi definido como parcela a ser paga "no final do ripamento" — correlação validada. Uma segunda correlação MATH_VALUE_MATCH (confidence 1,0) vincula o mesmo pagamento a outro evento (c_69, não amostrado integralmente), reforçando a consistência.
-
-O contexto do dia 10 é rico em especificação técnica. Às 11h50, Everaldo Caitano Baia solicita 21 telhas de 5,10m e 21 telhas de 8,20m (f_8312ad5f86c4). Às 12h04, pede que Lucas encaminhe a mensagem ao "pessoal da Brafi" (f_ef1138706f03). Às 12h04, solicita a chave PIX e menciona que estava na "Niple" (f_70ec3d40eb02) — a chave "33988420122" é enviada por texto às 12h17 (m_8ff36e5e7e97), e o PIX é executado às 12h42. A sequência — solicitação de chave PIX às 12h17, pagamento às 12h42 — é consistente com fluxo normal de pagamento.
-
-À tarde, a discussão migra para o levantamento de material do fechamento: Everaldo Caitano Baia calcula 10 telhas de 2,80m para a frente e 10 para o fundo (f_97b673bdd14b); Lucas consolida por texto: "Fechamento lateral 40 telhas de 2 metros ondulada" e "Fechamento frontal 20 telhas de 2.80" (m_1d433df1e45b, m_79d2e366feaf). Às 19h30, Everaldo Caitano Baia detalha tecnicamente a necessidade de telhas de 2,80m para o fechamento frontal, explicando que telhas de 2m resultariam em emenda inaceitável (f_a35295f7a404, f_52d95880cddb).
-
-### Marco V — Incidente Externo e Continuidade da Obra (14/04/2026)
-
-O dia 14 de abril registra 27 eventos, com destaque para um incidente externo: Everaldo Caitano Baia relata ter tombado seu trator no dia anterior e conseguido endireitá-lo com ajuda (f_926046b3000c, f_1cc81fd7236d). Múltiplas análises visuais confirmam imagens de trator tombado e posteriormente recuperado (f_6aabe626c533, f_0f35f87c47e5, f_0d56fa6ac8dc). O incidente não parece ter impactado diretamente a obra, pois às 18h32 Everaldo Caitano Baia informa: "Amanhã acaba o rolamento lá tá, ai vamos continuar no lambrado" (m_7ac9e5e7adb7).
-
-Neste dia também ocorre o terceiro pagamento: às 12h26, Everaldo Caitano Baia menciona necessidade de tinta e gasolina (f_b5a81acff938); às 12h27, Lucas solicita o PIX (m_7001eefb6b51); às 12h30, a chave "33988420122" é fornecida (m_9f39869314d6); às 12h31, Lucas pergunta "Vai precisar de quanto?" (m_13a7d103cfe5); às 12h34, a resposta é "30 da" (m_1491f59721eb). Em **14 de abril às 13h43**, o PIX de **R$ 30,00** é executado com descrição *"Gasolina tinta"* (f_d0e30d9f1533). A sequência é coerente e o valor corresponde exatamente ao solicitado.
-
-### Marco VI — Execução do Ripamento, Problema com Alambrado e Pagamento Final (15–16/04/2026)
-
-O dia 15 de abril foi o mais intenso do período (52 eventos). Às 09h35, Everaldo Caitano Baia reclama da falta de eletrodo para solda, sinalizando dependência de material fornecido pela contratante (f_1a95546ac312). Às 10h36, reporta progresso: "tudo pronto, só falta esse vão aqui" (f_48d9c497429e). Às 10h40, Lucas confirma por texto: "Ripamento liberado" (m_341b91627965). Às 10h48, Everaldo Caitano Baia reforça em áudio: "o ripamento ta liberado, tá? Todos os filé. Prontinho. Agora começar nos alambrados ali" (f_58eca1943d80).
-
-A partir das 13h, emerge um problema técnico sério: os alambrados foram instalados por terceiros com medidas erradas — abaixo de 2 metros, com 4 centímetros faltando (f_d3862d087302). Everaldo Caitano Baia documenta o problema em vídeo e áudio: "os caras são burros demais, cortou o trem em grau aqui, mas só que instalou eles torcido, vai ter que mexer tudo" (f_8e34259c9abb). Às 13h11, avalia que será necessário arrancar e recolocar (f_7727cd122b1e). Lucas confirma por texto: "Vamos rapais pq tá tudo errado as medidas lá. Isso que vai atrasar" (m_1c611436ebd0, m_77b2988cad83). Às 17h28, Everaldo Caitano Baia estima que o alambrado consumirá o restante da semana (f_0ae453ef91c1).
-
-Em **16 de abril de 2026 às 10h05**, Everaldo Caitano Baia reporta progresso na solda do alambrado (f_1f32f1bbaf78). Às 10h08, menciona pagamento pendente relacionado à conclusão da parte superior (f_12da80b0a8e3). Às 10h15, a chave PIX "33988420122" é enviada novamente (m_ce36775e9749). Em **16 de abril às 10h17**, a CONSTRUTORA E IMOBILIARIA VALE NOBRE LTD realiza o quarto e maior PIX: **R$ 5.500,00** com descrição *"Metade do serviço telhado"* (f_447ffc4b9024). Às 10h20, Everaldo Caitano Baia responde: "Muito obrigado" (m_8921a35649fb) — último evento registrado no dossier.
+> **Segundo informação complementar do operador — sem evidência no canal WhatsApp:** as negociações de 04 e 05/04 podem ter tido continuidade fora do WhatsApp; o acordo formal do C1 só se materializou em 06/04.
 
 ---
 
-## 3. Ledger Financeiro Consolidado
+### Bloco 2 — Fechamento do C1 e Primeiro Pagamento (05–06/04/2026)
 
-| Data | Hora | Valor | Descrição | Arquivo |
-|---|---|---|---|---|
-| 06/04/2026 | 11h13 | **R$ 3.500,00** | 50% de sinal — serralheria (tesouras, terças, telhado e fechamento) | f_7d3f788778ab |
-| 10/04/2026 | 12h42 | **R$ 3.500,00** | Sem descrição (correlacionado ao final do ripamento) | f_56bd10688411 |
-| 14/04/2026 | 13h43 | **R$ 30,00** | Gasolina tinta | f_d0e30d9f1533 |
-| 16/04/2026 | 10h17 | **R$ 5.500,00** | Metade do serviço telhado | f_447ffc4b9024 |
-| **TOTAL** | | **R$ 12.530,00** | | |
+O dia 5 de abril registrou apenas 5 eventos (off-topic e cronograma), sem negociação relevante amostrada. Em 06/04, com 12 eventos, o canal registra o **fechamento do Contrato C1** e o pagamento do sinal correspondente.
 
-O fluxo de pagamentos revela uma estrutura de adiantamentos progressivos. O primeiro PIX (R$ 3.500,00) é explicitamente descrito como "50% de sinal", o que implica um valor total contratado de R$ 7.000,00 para a fase inicial (tesouras e terças). O segundo PIX (R$ 3.500,00), sem descrição, corresponde matematicamente à outra metade desse mesmo contrato — correlação MATH_VALUE_MATCH validada com confidence 1,0 (c_60). O quarto PIX (R$ 5.500,00), descrito como "Metade do serviço telhado", implica que o serviço de telhado foi contratado por R$ 11.000,00, com R$ 5.500,00 pagos em 16/04 e R$ 5.500,00 ainda pendentes ao final do período registrado.
+Às 11h13 de 06/04, a Construtora e Imobiliária Vale Nobre Ltda realizou PIX de **R$3.500,00** para Everaldo Caitano Baia, com descrição explícita: *"50% de sinal do serviço de serralheria (subir e instalar tesouras e terças do telhado e fechamento)"* (f_7d3f788778ab). Este pagamento corresponde ao **sinal de 50% do C1** (valor total R$7.000,00), conforme confirmado pelo ground truth.
+
+A correlação temporal validada (TEMPORAL_PAYMENT_CONTEXT, confidence 1,0) indica que, aproximadamente 3 minutos e 35 segundos antes deste PIX (delta = −215s), houve mensagem com múltiplas keywords de pagamento no canal (c_131) — padrão consistente com a solicitação da chave PIX imediatamente antes da transferência. As correlações semânticas validadas (SEMANTIC_PAYMENT_SCOPE, confidence 0,80) ligam este pagamento às negociações de 04/04 sobre "serviço", "telhado", "tesoura" e "terça" (c_3, c_9, c_16), confirmando que o PIX de R$3.500,00 é o desdobramento direto das tratativas iniciadas dois dias antes.
+
+> **Nota forense:** A descrição do PIX menciona "fechamento", o que poderia gerar ambiguidade. Segundo o ground truth, este "fechamento" refere-se ao **esqueleto estrutural** (C1), não ao fechamento com tela/alambrado (C2). Não há divergência detectada — a descrição é consistente com o escopo do C1.
 
 ---
 
-## 4. Padrões Observados
+### Bloco 3 — Execução do C1 e Reabertura de Negociação (07–08/04/2026)
 
-**Padrão de negociação iterativa:** A negociação de valores ocorreu em múltiplas rodadas (04/04 e 08/04), com propostas partindo de R$ 12.000,00, passando por R$ 11.000,00, chegando a R$ 10.000,00 e retornando a R$ 11.000,00. Esse padrão sugere que o escopo do serviço foi sendo redefinido ao longo das conversas, com o fechamento lateral sendo tratado ora como incluso, ora como serviço adicional.
+Em 07/04 (7 eventos: material e especificação técnica), o canal registra discussões sobre materiais e detalhes técnicos, sugerindo que Everaldo Caitano Baia já estava mobilizado ou em preparação para o serviço.
 
-**Padrão de pagamento por chave PIX recorrente:** A chave "33988420122" aparece em três momentos distintos (10/04, 14/04 e 16/04), sempre precedendo um PIX em minutos. Isso indica que a chave pertence a Everaldo Caitano Baia e é o canal exclusivo de recebimento.
+O dia 08/04 é o segundo mais denso do corpus (48 eventos) e constitui um **ponto de inflexão narrativo**: a negociação do C2 foi aberta, travada e fechada no mesmo dia. Pela manhã, Everaldo Caitano Baia retomou a discussão de escopo e valores, apresentando cálculo de R$50/metro para o fechamento lateral e sinalizando que o valor de R$11.000,00 anteriormente discutido não cobria o fechamento completo — apenas o telhado (f_c9e008c74a4c; f_4a5b4347572f). Lucas Fernandes Leite reagiu: "Você não tinha falado comigo que você ia fazer 11 mil e tudo?" (f_9f1926960841), evidenciando divergência de entendimento sobre o escopo do acordo anterior.
 
-**Gap de comunicação:** Não há eventos amostrados para 11, 12 e 13 de abril (com apenas 3 eventos em 13/04 sobre especificação técnica e material). Isso pode indicar que a execução correu sem intercorrências nesses dias, ou que a comunicação ocorreu por outros canais.
+Everaldo Caitano Baia esclareceu a estrutura de dois contratos: **R$7.000,00 para deixar engradado** (C1, já com sinal pago) e **R$11.000,00 para o acabamento completo** (C2 — telhado, calha, fechamento, alambrado) (f_8d71fada5763). Lucas Fernandes Leite, às 09h03, revelou sua restrição orçamentária: "eu tenho só sete mil, além do que eu já tenho" (f_c9073788ceac), e às 20h31 propôs fechar em R$10.000,00 com sinal imediato de R$5.000,00 (f_6b289ad150a3).
 
-**Dependência de material pela contratante:** Em 15/04, Everaldo Caitano Baia reclama da falta de eletrodo (f_1a95546ac312), e em 15/04 menciona que "o material tem que estar aqui" (f_1a95546ac312). Isso sugere que o contrato é de mão de obra empreitada com material fornecido pela CONSTRUTORA E IMOBILIARIA VALE NOBRE LTD.
+Às 20h36, Lucas Fernandes Leite recuou para o valor original: "vamos fechar nos 11 então, só que eu vou te pagar junto com os R$3.500 que eu vou te pagar no final do ripamento, aí eu te pago os R$3.500 mais os R$5.500 do outro" (f_5fa1642121f7) — correlação MATH_VALUE_MATCH validada (confidence 1,0) liga esta menção de R$3.500,00 ao segundo PIX do C1 (fr_2), que seria pago em 10/04. Às 20h38, Everaldo Caitano Baia ajustou: pediu que Lucas Fernandes Leite mandasse apenas R$3.000,00 de sinal do C2, ficando com R$2.000,00 para repassar a um auxiliar (f_8818a3e9ce31). Às 20h39, Lucas Fernandes Leite respondeu "Fechado" (m_2bc09ed4e365) — **C2 formalmente acordado**.
 
-**Problema de execução por terceiros:** O alambrado foi instalado por outros trabalhadores (não identificados) com medidas incorretas, gerando retrabalho documentado por Everaldo Caitano Baia em 15/04. Lucas reconhece o problema por texto. Isso representa um ponto de risco de prazo e custo adicional.
-
----
-
-## 5. Observações Forenses
-
-**5.1 Divergência entre valor negociado e valor pago (MATH_VALUE_DIVERGENCE)**
-
-O dossier registra duas correlações do tipo MATH_VALUE_DIVERGENCE. Embora os detalhes individuais dessas correlações não estejam expandidos no campo `top_validated`, a análise do ledger revela uma divergência relevante: o contrato verbal de 08/04 estabeleceu R$ 11.000,00 para o serviço de fechamento/telhado, com estrutura de pagamento de R$ 3.500,00 (final do ripamento) + R$ 5.500,00 (outra metade) + saldo restante. O PIX de 16/04 é descrito como "Metade do serviço telhado" (R$ 5.500,00), o que implica total de R$ 11.000,00 para esse escopo — consistente com o acordado. Contudo, o segundo PIX de R$ 3.500,00 (10/04) não tem descrição, o que impede confirmação documental de a qual etapa se refere. Possivelmente corresponde ao pagamento pelo ripamento concluído, conforme acordado em 08/04 (f_5fa1642121f7), mas a ausência de descrição é uma lacuna documental.
-
-**5.2 Mensagem apagada em momento crítico**
-
-Às 09h13 de 08/04, uma mensagem foi apagada (m_d7125269cd5b), imediatamente após a aceitação do acordo por Lucas ("Top, desse jeito tá certo pra mim" — f_ac90b14619ba). O conteúdo apagado pode ter contido termos finais do acordo ou valores específicos. Sua ausência impede a reconstrução completa do que foi combinado naquele momento.
-
-**5.3 Escopo contratual com múltiplas camadas**
-
-A análise das negociações sugere que existem pelo menos dois contratos sobrepostos: (a) o serviço de serralheria inicial (tesouras, terças, ripamento) por R$ 7.000,00, com sinal de R$ 3.500,00 em 06/04; e (b) o serviço de telhado completo com fechamento por R$ 11.000,00, com pagamentos em 10/04 e 16/04. A sobreposição de escopos e a ausência de descrição no segundo PIX tornam ambígua a contabilização total do contrato. O total pago até 16/04 é R$ 12.530,00, mas o valor total contratado (somando os dois escopos e o saldo pendente de R$ 5.500,00) possivelmente alcança R$ 18.030,00 — inferência baseada na estrutura de pagamentos observada, marcada como possível.
-
-**5.4 Incidente com trator em 14/04**
-
-Everaldo Caitano Baia relata tombamento de trator no dia 13/04 (f_926046b3000c), com imagens confirmadas pelas análises visuais. O incidente não está diretamente relacionado à obra, mas pode indicar que Everaldo Caitano Baia opera outros serviços simultaneamente, o que pode impactar disponibilidade e prazo.
-
-**5.5 Problema técnico com alambrado**
-
-O alambrado instalado por terceiros com medidas incorretas (abaixo de 2 metros) representa um ponto de atenção: Everaldo Caitano Baia afirma que não é responsável pela instalação original, apenas pela correção. Isso pode gerar discussão futura sobre responsabilidade pelo retrabalho e custo adicional não previsto no contrato.
+Everaldo Caitano Baia comprometeu-se a trabalhar quinta e sexta na obra, com possibilidade de sábado (f_74dc8c677f7f), e reforçou que a equipe trabalha rápido (f_cc41abc4b46b).
 
 ---
 
-## 6. Fechamento
+### Bloco 4 — Quitação do C1 e Levantamento de Material (09–10/04/2026)
 
-Ao final do período registrado (16/04/2026), a obra encontra-se em fase de execução avançada — ripamento
+Em 09/04 (17 eventos: off-topic, cronograma, reporte de execução), o canal registra acompanhamento de andamento, sem eventos financeiros amostrados.
+
+Em 10/04 (26 eventos: material, especificação técnica), o dia foi marcado por dois movimentos simultâneos: **quitação do C1** e **levantamento detalhado de material para o C2**.
+
+Às 12h04, Everaldo Caitano Baia solicitou a chave PIX e o envio do dinheiro (f_70ec3d40eb02). Às 12h17, a chave foi fornecida por texto: "33988420122 Pix" (m_8ff36e5e7e97). Às 12h42, a Vale Nobre realizou PIX de **R$3.500,00** para Everaldo Caitano Baia, sem descrição (f_56bd10688411). Este pagamento corresponde ao **saldo de 50% do C1**, conforme ground truth. A correlação MATH_VALUE_MATCH validada (confidence 1,0) confirma que a menção de R$3.500,00 em c_60 (negociação de 08/04) antecipava exatamente este valor (delta = −73.589s, aproximadamente 20 horas antes).
+
+Ao longo da tarde, Everaldo Caitano Baia e Lucas Fernandes Leite trocaram especificações detalhadas de telhas: 21 telhas de 5,10m + 21 telhas de 8,20m para o telhado (m_274b9d5a5747); 40 telhas de 2m onduladas para fechamento lateral (m_1d433df1e45b); 20 telhas de 2,80m para fechamento frontal (m_79d2e366feaf). Everaldo Caitano Baia alertou que no fechamento frontal haveria perda de material por corte em grau (f_b244b43ff177; f_a35295f7a404).
+
+---
+
+### Bloco 5 — Execução em Campo e Reembolso Operacional (11–14/04/2026)
+
+Os dias 11 a 13/04 registraram atividade reduzida (3 eventos em 13/04: especificação técnica e material), sugerindo que Everaldo Caitano Baia estava em campo com comunicação mínima.
+
+Em 14/04 (27 eventos), o canal registrou um **reembolso operacional** e o relato de um incidente externo. Às 12h26, Everaldo Caitano Baia informou que precisava de tinta e gasolina para o serviço (f_b5a81acff938). Às 12h27, Lucas Fernandes Leite solicitou a chave PIX (m_7001eefb6b51); às 12h30, a chave foi fornecida (m_9f39869314d6); às 12h31, Lucas Fernandes Leite perguntou o valor necessário (m_13a7d103cfe5); às 12h34, Everaldo Caitano Baia respondeu "30 da" (m_1491f59721eb). Às 13h43, a Vale Nobre realizou PIX de **R$30,00** com descrição "Gasolina tinta" (f_d0e30d9f1533) — reembolso operacional fora dos contratos principais, conforme ground truth.
+
+À tarde, Everaldo Caitano Baia relatou que havia tombado seu trator no dia anterior e conseguido endireitá-lo (f_926046b3000c; f_1cc81fd7236d). Múltiplas análises visuais do mesmo horário (17h06) confirmam imagens de trator tombado/estacionado (f_6aabe626c533; f_0f35f87c47e5). Às 18h32, Lucas Fernandes Leite informou: "Amanhã acaba o rolamento lá tá ai vamos continuar no lambrado" (m_7ac9e5e7adb7), indicando que o ripamento estava em fase final.
+
+---
+
+### Bloco 6 — Ripamento Concluído, Problema no Alambrado e Sinal do C2 (15–16/04/2026)
+
+O dia 15/04 é o mais denso do corpus (52 eventos) e concentra o **marco de conclusão do ripamento** e a **descoberta de problema técnico grave no alambrado**.
+
+Às 09h35, Everaldo Caitano Baia reclamou da falta de eletrodo para solda, sinalizando que o material de consumo deveria ser fornecido pela contratante (f_1a95546ac312). Às 10h36, reportou progresso: "tudo pronto, só falta esse vão aqui" (f_48d9c497429e). Às 10h40, Lucas Fernandes Leite declarou por texto: "Ripamento liberado" (m_341b91627965), confirmado em áudio por Everaldo Caitano Baia às 10h48: "o ripamento ta liberado, tá? Todos os filé. Prontinho. Agora começar nos alambrados ali." (f_58eca1943d80).
+
+A partir das 13h03, o canal registrou uma sequência de reportes técnicos preocupantes: Everaldo Caitano Baia identificou que o alambrado havia sido instalado por terceiros com medidas erradas — peças cortadas abaixo de 2 metros, instaladas torcidas, exigindo retrabalho extenso (f_8e34259c9abb; f_3da4b041e3d3; f_7727cd122b1e). Às 13h07, medição com fita métrica confirmou déficit de 4 centímetros na altura (f_d3862d087302; f_a7aea9b9bc34). Às 17h28, Everaldo Caitano Baia estimou que o alambrado consumiria o restante da semana (f_0ae453ef91c1). Lucas Fernandes Leite confirmou: "tá tudo errado as medidas lá / Isso que vai atrasar" (m_1c611436ebd0; m_77b2988cad83).
+
+> Segundo o ground truth, a responsabilidade pelo alambrado com medidas erradas é de **terceiros anteriores** à intervenção de Everaldo Caitano Baia — fato corroborado pelas mensagens do canal, que atribuem o erro a "os caras" que fizeram o serviço antes.
+
+Em 16/04 (5 eventos), às 10h08, Everaldo Caitano Baia solicitou pagamento, mencionando que "em cima tá terminado" (f_12da80b0a8e3). Às 10h15, a chave PIX foi fornecida novamente (m_ce36775e9749). Às 10h17, a Vale Nobre realizou PIX de **R$5.500,00** com descrição "Metade do serviço telhado" (f_447ffc4b9024) — este é o **sinal de 50% do C2**. Às 10h20, Everaldo Caitano Baia respondeu "Muito obrigado" (m_8921a35649fb).
+
+---
+
+## Ledger Financeiro Consolidado
+
+| Data | Hora | Valor | Contrato | Parcela | Descrição PIX | Arquivo |
+|---|---|---|---|---|---|---|
+| 06/04/2026 | 11:13 | **R$ 3.500,00** | C1 | Sinal 50% | "50% de sinal do serviço de serralheria (subir e instalar tesouras e terças do telhado e fechamento)" | f_7d3f788778ab |
+| 10/04/2026 | 12:42 | **R$ 3.500,00** | C1 | Saldo 50% | *(sem descrição)* | f_56bd10688411 |
+| 14/04/2026 | 13:43 | **R$ 30,00** | — | Reembolso operacional | "Gasolina tinta" | f_d0e30d9f1533 |
+| 16/04/2026 | 10:17 | **R$ 5.500,00** | C2 | Sinal 50% | "Metade do serviço telhado" | f_447ffc4b9024 |
+| **TOTAL PAGO** | | **R$ 12.530,00** | | | | |
+| **PENDENTE** | | **R$ 5.500,00** | C2 | Saldo 50% | A pagar na conclusão | — |
+| **TOTAL NEGOCIADO** | | **R$ 18.000,00** | | | | |
+
+O C1 (R$7.000,00) está **integralmente quitado**. O C2 (R$11.000,00) tem 50% pago (R$5.500,00) e saldo de R$5.500,00 pendente, condicionado à conclusão do serviço. O reembolso de R$30,00 é item externo aos contratos principais. O percentual financeiro concluído é de **69,4%** do total negociado.
+
+---
+
+## Padrões Observados
+
+**Padrão de pagamento PIX com solicitação de chave:** Em todos os três pagamentos contratuais, o fluxo foi idêntico — Everaldo Caitano Baia sinalizou disponibilidade ou conclusão de etapa, Lucas Fernandes Leite solicitou a chave PIX, a chave foi fornecida por texto (número de telefone 33988420122), e o PIX foi executado em minutos. Este padrão é consistente e não apresenta desvios.
+
+**Negociação em múltiplas rodadas:** O C1 levou dois dias de negociação (04–06/04) antes do fechamento; o C2 foi negociado e fechado no mesmo dia (08/04), mas com múltiplas rodadas de proposta e contraproposta no mesmo dia (R$12.000 → R$11.000 → R$10.000 → R$11.000 final). Isso sugere que Lucas Fernandes Leite tinha restrição orçamentária real e que Everaldo Caitano Baia tinha margem limitada para concessão.
+
+**Gap de comunicação 11–13/04:** Apenas 3 eventos registrados em 13/04 e nenhum amostrado em 11–12/04, sugerindo que Everaldo Caitano Baia estava em campo com comunicação mínima — padrão típico de execução intensa.
+
+**Ruído off-topic elevado:** 96 dos 239 eventos (40,2%) foram classificados como off-topic, incluindo o episódio do trator tombado (14/04) e conversas sobre máquinas de solda (08/04). Isso é característico de canal de relacionamento pessoal entre contratante e prestador, não de canal exclusivamente operacional.
+
+---
+
+## Observações Forenses
+
+**1. Divergência de entendimento de escopo (08/04):** A troca de mensagens da manhã de 08/04 revela que Lucas Fernandes Leite entendia que R$11.000,00 cobria "tudo" (telhado + fechamento completo), enquanto Everaldo Caitano Baia entendia que R$11.000,00 era o C2 (acabamento), separado do C1 (esqueleto, R$7.000,00). A resolução foi explicitada por Everaldo Caitano Baia em f_8d71fada5763 e aceita por Lucas Fernandes Leite. Não há divergência residual detectada — o entendimento foi alinhado no mesmo dia.
+
+**2. MATH_VALUE_DIVERGENCE — atenção:** O dossier registra 2 correlações do tipo MATH_VALUE_DIVERGENCE (não validadas, confidence < 0,70). Embora não detalhadas nos top_validated, a presença deste tipo de correlação sugere que em algum momento valores mencionados no corpus estão na faixa de 50%–150% do valor pago sem match exato. Possivelmente relacionado às propostas intermediárias de R$10.000,00 (C2) ou R$12.000,00 (proposta inicial) que não se converteram em pagamento. Recomenda-se verificação manual dos eventos correlacionados.
+
+**3. Sinal do C2 menor que o acordado:** Na negociação de 08/04, Everaldo Caitano Baia pediu que Lucas Fernandes Leite mandasse R$3.000,00 de sinal do C2 (f_8818a3e9ce31), não R$5.500,00 (50% de R$11.000,00). O PIX efetivamente pago em 16/04 foi de R$5.500,00 — valor correspondente a 50% exato do C2. Isso sugere que o modelo 50/50 prevaleceu sobre o ajuste pedido por Everaldo Caitano Baia em 08/04, possivelmente por acordo posterior não registrado no corpus amostrado.
+
+**4. Ausência de contrato escrito:** Segundo o ground truth, nenhum contrato formal foi firmado — todos os acordos são verbais via áudio WhatsApp. Isso é um ponto de atenção para fins de comprovação contratual, especialmente considerando que a obra é de reforma de escola pública (SEE-MG / SRE Manhuaçu).
+
+**5. Problema no alambrado — responsabilidade de terceiros:** As mensagens de 15/04 são inequívocas em atribuir o erro de medidas do
