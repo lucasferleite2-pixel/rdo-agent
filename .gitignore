@@ -48,3 +48,10 @@ scratch/
 tmp/
 .env.*
 .env
+
+# Backups de narrativas preservados localmente (não versionados)
+reports/narratives/*.bak-pre-*/
+
+# RDOs históricos (produtos gerados — reorganizar em Sessão 3)
+reports/rdo_piloto_*
+reports/old_pre-*

@@ -260,3 +260,75 @@ Tags Sprint 5 series:
 - **`v0.5.0-sprint5-fase-a`** (este — infra Fase A + esqueleto B)
 - Futura: `v0.5.1-sprint5-fase-a-prod` (apos producao)
 - Futura: `v0.6.0-sprint5-fase-b` (correlacoes reais)
+
+---
+
+## Addendum (2026-04-23) — Descoberta Arquitetural: Ground Truth Injection
+
+### Motivação
+
+Durante validação da narrativa obra_overview gerada, o Lucas (domain expert) identificou que o agente **inferiu incorretamente** a estrutura contratual da obra EVERALDO_SANTAQUITERIA.
+
+**Realidade contratual:**
+- Contrato 1: R$ 7.000 (tesouras + terças) — negociado FORA do WhatsApp
+- Contrato 2: R$ 11.000 (telhado + fechamento + alambrado) — negociado NO WhatsApp em 04/04
+- Total negociado: R$ 18.000
+
+**O que o agente narrou:**
+- 1 único contrato de R$ 11.000 (leitura da negociação 04/04)
+- Detectou divergência R$1.500 e sinalizou "ajuste não documentado no dossier"
+
+### Análise
+
+O erro do agente é **metodologicamente correto**:
+- Ele narrou apenas o que estava na evidência
+- Sinalizou a lacuna de informação
+- Não inventou contratos sem base documental
+
+O limite expõe uma **necessidade arquitetural**: input complementar de fatos contratuais
+conhecidos pelo operador mas ausentes do corpus (acordos presenciais, contratos físicos,
+negociações por telefone).
+
+### Proposta: Sprint 5 Fase C — Ground Truth Injection
+
+**Feature:** CLI aceita parâmetro `--context obra_context.yml` com ground truth estruturado.
+
+**Schema YAML** (proposto):
+```yaml
+obra: EVERALDO_SANTAQUITERIA
+contratos:
+  - id: C1
+    escopo: "Tesouras + terças"
+    valor: 7000.00
+    origem: "acordo_presencial_fora_whatsapp"
+  - id: C2
+    escopo: "Telhado + fechamento + alambrado"
+    valor: 11000.00
+    origem: "whatsapp_04_04_2026"
+pagamentos_confirmados:
+  - valor: 3500.00
+    data: 2026-04-06
+    contrato_ref: C1
+    parcela: "sinal_50pct"
+  # ...
+```
+
+**Impacto:** narrativa evolui de "inferência" para "auditoria forense", mudando
+natureza comercial do produto (narrador → perito assistente).
+
+**Estimativa:** 3-5h de sessão autônoma, custo ~$1-2.
+
+### Proposta: Sprint 5 Fase D — Ground Truth Extraction (futura)
+
+Modo interativo onde agente conversa com operador para extrair ground truth estruturado,
+reduzindo fricção de uso. Output: YAML pronto pra Fase C.
+
+### Roadmap atualizado pós-descoberta
+
+- Fase A: ✅ Concluída
+- Fase A.1 (polimento): próximo
+- Fase B (correlator rule-based): sessão dedicada
+- Fase C (ground truth injection): NOVA — alta prioridade
+- Fase D (ground truth extraction): NOVA
+- Fase E (contestações hipotéticas): renumerada (era Fase D)
+- Fase F (run final): renumerada (era Run Final)
