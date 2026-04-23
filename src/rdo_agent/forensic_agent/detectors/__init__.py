@@ -10,10 +10,14 @@ persiste via `save_correlation`.
 
 from __future__ import annotations
 
+from rdo_agent.forensic_agent.detectors.semantic import (
+    detect_semantic_payment_scope,
+)
 from rdo_agent.forensic_agent.detectors.temporal import (
     detect_temporal_payment_context,
 )
 
 __all__ = [
+    "detect_semantic_payment_scope",
     "detect_temporal_payment_context",
 ]
