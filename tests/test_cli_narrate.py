@@ -153,6 +153,7 @@ def _seed_vault(tmp_path, monkeypatch, obra: str) -> sqlite3.Connection:
 def _install_fake_anthropic(monkeypatch, queue):
     c = _FakeAnthropicClient(queue)
     monkeypatch.setattr(narrator, "_get_anthropic_client", lambda: c)
+    return c
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +274,74 @@ def test_narrate_skip_cache_regenerates(seeded, monkeypatch):
     ])
     assert r2.exit_code == 0
     assert "cache hit" not in r2.output
+
+
+def test_narrate_context_nonexistent_file_errors(tmp_path, monkeypatch):
+    _seed_vault(tmp_path, monkeypatch, "OBRA_CTX").close()
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "narrate", "--obra", "OBRA_CTX", "--dia", "2026-04-06",
+        "--reports-root", str(tmp_path / "reports"),
+        "--context", str(tmp_path / "nao_existe.yml"),
+    ])
+    assert result.exit_code == 2
+    assert "nao encontrado" in result.output
+
+
+def test_narrate_context_invalid_yaml_errors(tmp_path, monkeypatch):
+    _seed_vault(tmp_path, monkeypatch, "OBRA_CTX").close()
+    bad = tmp_path / "bad.yml"
+    bad.write_text("- so uma lista\n- sem obra_real", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(main, [
+        "narrate", "--obra", "OBRA_CTX", "--dia", "2026-04-06",
+        "--reports-root", str(tmp_path / "reports"),
+        "--context", str(bad),
+    ])
+    assert result.exit_code == 2
+    assert "Ground Truth invalido" in result.output
+
+
+def test_narrate_context_valid_passes_gt_to_dossier(seeded, monkeypatch):
+    """Com --context valido, narrate usa prompt V3_GT."""
+    tmp_path, conn = seeded
+    conn.close()
+    gt_yml = tmp_path / "gt.yml"
+    gt_yml.write_text(
+        "obra_real:\n"
+        "  nome: Teste\n"
+        "  contratada: TesteLTDA\n"
+        "canal:\n"
+        "  id: OBRA_CLI\n"
+        "  tipo: whatsapp\n"
+        "  parte_A: {nome: A, papel: a}\n"
+        "  parte_B: {nome: B, papel: b}\n"
+        "contratos:\n"
+        "  - id: C1\n"
+        "    escopo: teste\n"
+        "    valor_total: 7000.00\n",
+        encoding="utf-8",
+    )
+    client = _install_fake_anthropic(monkeypatch, [
+        _FakeMessage(_mock_narrative()),
+    ])
+
+    runner = CliRunner()
+    r = runner.invoke(main, [
+        "narrate", "--obra", "OBRA_CLI", "--dia", "2026-04-06",
+        "--reports-root", str(tmp_path / "reports"),
+        "--context", str(gt_yml),
+    ])
+    assert r.exit_code == 0
+    # Verifica que o system prompt usado eh o V3_GT
+    from rdo_agent.forensic_agent.prompts import (
+        NARRATOR_SYSTEM_PROMPT_V3_GT,
+    )
+    call = client.messages.calls[0]
+    assert call["system"] == NARRATOR_SYSTEM_PROMPT_V3_GT
+    # Mensagem de confirmacao da CLI
+    assert "Ground Truth carregado" in r.output
+    assert "1 contratos" in r.output
 
 
 def test_narrate_fails_gracefully_without_anthropic_key(

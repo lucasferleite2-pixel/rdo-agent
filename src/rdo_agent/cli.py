@@ -812,11 +812,23 @@ def review(obra: str) -> None:
     "--reports-root", default="reports/narratives",
     help="Diretorio raiz para arquivos markdown (default reports/narratives)",
 )
+@click.option(
+    "--context",
+    "context_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Ground Truth YAML (Sprint 5 Fase C). Se fornecido, narrator "
+        "verifica corpus contra GT e marca CONFORME/DIVERGENTE/"
+        "NAO VERIFICAVEL. Invalida cache automaticamente (hash muda)."
+    ),
+)
 def narrate_cmd(
     obra: str, dia: str | None, scope: str | None,
     skip_cache: bool, reports_root: str,
+    context_path: Path | None,
 ) -> None:
-    """Gera narrativa forense (Sprint 5 Fase A) via agente Sonnet 4.6."""
+    """Gera narrativa forense (Sprint 5 Fase A+C) via agente Sonnet 4.6."""
     from rdo_agent.forensic_agent import (
         build_day_dossier,
         build_obra_overview_dossier,
@@ -826,6 +838,33 @@ def narrate_cmd(
         validate_narrative,
     )
     from rdo_agent.orchestrator import init_db
+
+    # Fase C: carrega Ground Truth se --context fornecido
+    gt = None
+    if context_path is not None:
+        if not context_path.exists():
+            console.print(
+                f"[red]x arquivo --context nao encontrado: {context_path}[/red]"
+            )
+            sys.exit(2)
+        from rdo_agent.ground_truth import (
+            GroundTruthValidationError, load_ground_truth,
+        )
+        try:
+            gt = load_ground_truth(context_path)
+        except GroundTruthValidationError as exc:
+            console.print(
+                f"[red]x Ground Truth invalido:[/red] {exc}"
+            )
+            sys.exit(2)
+        except ImportError as exc:
+            console.print(f"[red]x {exc}[/red]")
+            sys.exit(3)
+        console.print(
+            f"[cyan]+ Ground Truth carregado:[/cyan] {context_path.name} "
+            f"({len(gt.contratos)} contratos, "
+            f"{len(gt.pagamentos_confirmados)} pagamentos confirmados)"
+        )
 
     # Resolve scope default
     if scope is None:
@@ -870,9 +909,9 @@ def narrate_cmd(
             f"obra={obra} scope={sc} ref={ref or '(overview)'}"
         )
         if sc == "day":
-            dossier = build_day_dossier(conn, obra, ref)
+            dossier = build_day_dossier(conn, obra, ref, gt=gt)
         else:
-            dossier = build_obra_overview_dossier(conn, obra)
+            dossier = build_obra_overview_dossier(conn, obra, gt=gt)
 
         events_count = dossier["statistics"]["events_total"]
         if events_count == 0:
