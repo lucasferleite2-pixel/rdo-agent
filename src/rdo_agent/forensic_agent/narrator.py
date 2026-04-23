@@ -41,7 +41,7 @@ from rdo_agent.utils.logging import get_logger
 log = get_logger(__name__)
 
 MODEL: str = "claude-sonnet-4-6"
-PROMPT_VERSION: str = "narrator_v1"
+PROMPT_VERSION: str = "narrator_v2_correlations"
 TEMPERATURE: float = 0.1
 MAX_TOKENS: int = 6144
 ANTHROPIC_TIMEOUT_SEC: float = 300.0

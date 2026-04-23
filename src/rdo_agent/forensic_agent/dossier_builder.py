@@ -33,6 +33,11 @@ CONTENT_FULL_MAX_CHARS = 500
 OVERVIEW_SAMPLE_FIRST_N = 30
 OVERVIEW_SAMPLE_LAST_N = 20
 
+# Correlation validation threshold (ja persistida, usamos pra filtrar
+# o top_validated no obra_overview e marcar "validated" no day)
+CORRELATION_VALIDATED_THRESHOLD = 0.70
+CORRELATION_OVERVIEW_TOP_N = 10
+
 
 def _extract_date(ts_iso: str | None) -> str:
     if not ts_iso:
@@ -214,6 +219,79 @@ def _fetch_financial_records(
     ]
 
 
+def _correlation_row_to_dict(r: dict | sqlite3.Row) -> dict[str, Any]:
+    return {
+        "correlation_type": r["correlation_type"],
+        "primary_event_ref": r["primary_event_ref"],
+        "primary_event_source": r["primary_event_source"],
+        "related_event_ref": r["related_event_ref"],
+        "related_event_source": r["related_event_source"],
+        "time_gap_seconds": r["time_gap_seconds"],
+        "confidence": r["confidence"],
+        "rationale": r["rationale"],
+        "detected_by": r["detected_by"],
+        "validated": (r["confidence"] or 0) >= CORRELATION_VALIDATED_THRESHOLD,
+    }
+
+
+def _fetch_correlations_for_day(
+    conn: sqlite3.Connection, obra: str, date: str,
+    day_events: list[dict],
+) -> list[dict]:
+    """
+    Correlacoes onde primary OU related referencia:
+      - um financial_record cujo data_transacao == date, OU
+      - uma classification presente em `day_events` (mesmo dia)
+
+    Ordenadas por confidence desc.
+    """
+    fr_refs = {
+        f"fr_{r['id']}" for r in conn.execute(
+            "SELECT id FROM financial_records "
+            "WHERE obra = ? AND data_transacao = ?",
+            (obra, date),
+        )
+    }
+    cls_refs = {e["id"] for e in day_events}  # formato 'c_<id>'
+    all_refs = list(fr_refs | cls_refs)
+    if not all_refs:
+        return []
+    placeholders = ",".join("?" * len(all_refs))
+    sql = (
+        f"SELECT * FROM correlations WHERE obra = ? AND "
+        f"(primary_event_ref IN ({placeholders}) "
+        f"OR related_event_ref IN ({placeholders})) "
+        f"ORDER BY confidence DESC"
+    )
+    rows = conn.execute(sql, (obra, *all_refs, *all_refs)).fetchall()
+    return [_correlation_row_to_dict(dict(r)) for r in rows]
+
+
+def _fetch_correlations_summary(
+    conn: sqlite3.Connection, obra: str,
+) -> dict[str, Any]:
+    """Resumo da obra: total, breakdown por tipo, top validadas."""
+    rows = [dict(r) for r in conn.execute(
+        "SELECT * FROM correlations WHERE obra = ? "
+        "ORDER BY confidence DESC",
+        (obra,),
+    ).fetchall()]
+    by_type: dict[str, int] = {}
+    for r in rows:
+        t = r["correlation_type"]
+        by_type[t] = by_type.get(t, 0) + 1
+    validated = [
+        _correlation_row_to_dict(r) for r in rows
+        if (r["confidence"] or 0) >= CORRELATION_VALIDATED_THRESHOLD
+    ]
+    return {
+        "total": len(rows),
+        "by_type": by_type,
+        "validated_count": len(validated),
+        "top_validated": validated[:CORRELATION_OVERVIEW_TOP_N],
+    }
+
+
 def _compute_statistics(events: list[dict]) -> dict[str, Any]:
     by_source: dict[str, int] = {}
     by_category: dict[str, int] = {}
@@ -276,6 +354,7 @@ def build_day_dossier(
     financial_records = _fetch_financial_records(conn, obra, date_filter=date)
     stats = _compute_statistics(events)
     hints = _compute_context_hints(events, financial_records)
+    correlations = _fetch_correlations_for_day(conn, obra, date, events)
 
     if events:
         first = events[0]["timestamp"]
@@ -292,6 +371,7 @@ def build_day_dossier(
         "financial_records": financial_records,
         "events_timeline": events,
         "context_hints": hints,
+        "correlations": correlations,
     }
 
 
@@ -349,6 +429,8 @@ def build_obra_overview_dossier(
     else:
         first = last = None
 
+    correlations_summary = _fetch_correlations_summary(conn, obra)
+
     return {
         "obra": obra,
         "scope": "obra_overview",
@@ -361,6 +443,7 @@ def build_obra_overview_dossier(
         "events_sampled": len(sampled),
         "daily_summaries": daily_summaries,
         "context_hints": hints,
+        "correlations_summary": correlations_summary,
     }
 
 
