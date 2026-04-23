@@ -8,12 +8,19 @@ import sqlite3
 import pytest
 
 from rdo_agent.forensic_agent.detectors.semantic import (
-    CONFIDENCE_OVERLAP_MAX,
+    CONFIDENCE_SATURATION_WEIGHTED,
+    HIGH_SPECIFICITY_STEMS,
+    LOW_SPECIFICITY_STEMS,
     MIN_OVERLAP,
     STOPWORDS,
+    TIME_DECAY_FLOOR,
+    TOKEN_WEIGHT_HIGH,
+    TOKEN_WEIGHT_LOW,
     WINDOW,
     _stem,
     _strip_accents,
+    _time_decay,
+    _token_weight,
     detect_semantic_payment_scope,
     tokenize,
 )
@@ -198,7 +205,11 @@ def test_detect_no_overlap_returns_empty(db):
 
 
 def test_detect_overlap_2_terms_emits_correlation(db):
-    """Fr 'sinal serralheria telhado' vs cls mencionando 'serralheria telhado'."""
+    """Fr 'sinal serralheria telhado' vs cls mencionando 'serralheria telhado'.
+
+    Com o tuning #24, dois termos HIGH (serralheria+telh) + decay levissimo
+    em gap zero devem aproximar 2*1.5/4.0 = 0.75, validando (>=0.70).
+    """
     _seed_transcription_cls(
         db, obra="OBRA_S", idx=1,
         ts_iso="2026-04-06T10:00:00-03:00",
@@ -206,6 +217,7 @@ def test_detect_overlap_2_terms_emits_correlation(db):
     )
     fr_id = _seed_fr(
         db, obra="OBRA_S", idx=1, data="2026-04-06",
+        hora="10:00:00",
         descricao="sinal para serralheria telhado inteiro",
     )
     correlations = detect_semantic_payment_scope(db, "OBRA_S")
@@ -213,9 +225,10 @@ def test_detect_overlap_2_terms_emits_correlation(db):
     c = correlations[0]
     assert c.correlation_type == CorrelationType.SEMANTIC_PAYMENT_SCOPE.value
     assert c.primary_event_ref == f"fr_{fr_id}"
-    assert c.detected_by == "semantic_v1"
-    # overlap de 2 termos ('serralheria','telh') => 2/5 = 0.4
-    assert c.confidence == pytest.approx(2 / CONFIDENCE_OVERLAP_MAX, rel=1e-3)
+    assert c.detected_by == "semantic_v2"
+    # Pelo menos 0.70 (validada) — tuning #24 deve empurrar pares HIGH/HIGH
+    # alem do threshold em gap pequeno
+    assert c.confidence >= 0.70
 
 
 def test_detect_outside_3day_window_ignored(db):
@@ -246,15 +259,21 @@ def test_detect_skips_fr_without_descricao(db):
 
 
 def test_detect_saturates_confidence_at_1(db):
-    """Overlap muito grande => confidence 1.0."""
+    """
+    Overlap muito grande + gap zero => confidence 1.0 (saturado).
+
+    Apos #24 o decay temporal so atinge 1.0 com delta=0. Forcamos o
+    fr e a cls na MESMA hora pra que o decay seja neutro e o teste
+    valide somente a saturacao do score ponderado.
+    """
     text = "serralheria telhado sinal instalar completo material azul grande"
     _seed_transcription_cls(
         db, obra="OBRA_S", idx=1,
-        ts_iso="2026-04-06T10:00:00-03:00",
+        ts_iso="2026-04-06T11:00:00-03:00",
         text=text,
     )
     _seed_fr(
-        db, obra="OBRA_S", idx=1, data="2026-04-06",
+        db, obra="OBRA_S", idx=1, data="2026-04-06", hora="11:00:00",
         descricao="serralheria telhado sinal instalar completo material azul grande",
     )
     correlations = detect_semantic_payment_scope(db, "OBRA_S")

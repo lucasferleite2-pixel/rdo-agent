@@ -78,13 +78,63 @@ _SUFFIXES: tuple[str, ...] = (
 # Tokens muito curtos pos-stemming sao rejeitados (ruido)
 MIN_TOKEN_LEN = 3
 
-# Overlap saturation: overlap >= 5 => confidence 1.0
-CONFIDENCE_OVERLAP_MAX = 5
+# Divida #24: tuning com keyword weights + time decay
+#
+# Problema baseline: conf media 0.50 (concentrada em 0.4 quando overlap=2).
+# Apenas 16.7% das correlacoes SEMANTIC validavam (>=0.70).
+#
+# Fix: tokens especificos do dominio (pagamento, contrato, materiais de
+# obra) pesam mais; tokens genericos (servico, trabalho, coisa) pesam
+# menos; correlacoes mais longe temporalmente decaem linearmente.
 
-# Minimo de overlap pra emitir correlation
+# Peso padrao (tokens "medios")
+TOKEN_WEIGHT_DEFAULT = 1.0
+# Peso de tokens de ALTA especificidade (indicam estrutura financeira/contratual
+# ou atividade tecnica concreta da obra)
+TOKEN_WEIGHT_HIGH = 1.5
+# Peso de tokens de BAIXA especificidade (comercio/trabalho genericos —
+# qualquer conversa sobre obra usa)
+TOKEN_WEIGHT_LOW = 0.7
+
+# Tokens stemmed de alta especificidade (apos passar por `_stem`). A lista
+# eh curta e reflete vocabulario diretamente mapeavel ao domínio: atividade
+# de construcao (serralheria, telhado, alambrado, instalar), pagamento
+# (sinal, saldo, metade, pix, comprovant) e acabamentos (fechament,
+# tesoura, terca, ripament).
+HIGH_SPECIFICITY_STEMS: frozenset[str] = frozenset({
+    # pagamento / contrato
+    "sinal", "saldo", "metad", "pix", "comprovant", "parcel",
+    # atividade tecnica
+    "serralheria", "telh", "alambrad", "tesoura", "terca", "ripament",
+    "fecha",  # stemma de 'fechamento' / 'fechar' (contratual/estrutural)
+    "instal",  # 'instalar', 'instalacao'
+    "sub",     # 'subir', relevante em serralheria
+    "cobertur", "estrutur", "esquelet",
+})
+
+# Tokens stemmed de baixa especificidade (ruido contextual — qualquer
+# conversa de obra menciona)
+LOW_SPECIFICITY_STEMS: frozenset[str] = frozenset({
+    "servico", "trabalh", "obra", "material", "pessoa", "equip",
+    "coisa", "jeit", "parte", "situacao", "negoci",
+})
+
+# Saturation ponderada: somatorio de weights atinge essa marca => 1.0
+# base (antes do decay). Com MIN_OVERLAP=2 HIGH (2x1.5=3.0), isso da
+# base 3.0/4.0=0.75 — combinado com decay ~1 perto do centro cruza o
+# threshold de validacao (0.70).
+CONFIDENCE_SATURATION_WEIGHTED = 4.0
+
+# Time decay: linear de 1.0 (gap 0) a TIME_DECAY_FLOOR (gap=WINDOW).
+# Calibrado em 0.7 apos medir corpus real (deltas tipicos 1.5-1.9 dias
+# em janela de 3 dias); decay 0.5 eh severo demais e impede validacao
+# de matches semanticamente fortes com gap moderado.
+TIME_DECAY_FLOOR = 0.7
+
+# Minimo de overlap pra emitir correlation (inalterado)
 MIN_OVERLAP = 2
 
-DETECTOR_ID = "semantic_v1"
+DETECTOR_ID = "semantic_v2"  # bump versão pra refletir tuning (#24)
 
 
 def _strip_accents(s: str) -> str:
@@ -104,6 +154,36 @@ def _stem(token: str) -> str:
         if len(token) > len(suf) + 2 and token.endswith(suf):
             return token[: -len(suf)]
     return token
+
+
+def _token_weight(stem: str) -> float:
+    """Peso de um token stemmed para calculo de confidence (#24)."""
+    if stem in HIGH_SPECIFICITY_STEMS:
+        return TOKEN_WEIGHT_HIGH
+    if stem in LOW_SPECIFICITY_STEMS:
+        return TOKEN_WEIGHT_LOW
+    return TOKEN_WEIGHT_DEFAULT
+
+
+def _time_decay(delta_seconds: int, window_seconds: int) -> float:
+    """
+    Fator de decay linear no intervalo [TIME_DECAY_FLOOR, 1.0].
+    |delta|=0 => 1.0; |delta|=window => TIME_DECAY_FLOOR.
+    """
+    frac = min(abs(delta_seconds) / window_seconds, 1.0)
+    return 1.0 - (1.0 - TIME_DECAY_FLOOR) * frac
+
+
+def _weighted_confidence(
+    shared_stems: set[str], delta_seconds: int, window_seconds: int,
+) -> float:
+    """
+    Divida #24: confidence = (soma de pesos) / SATURATION * time_decay,
+    cap em 1.0.
+    """
+    total_weight = sum(_token_weight(t) for t in shared_stems)
+    base = min(total_weight / CONFIDENCE_SATURATION_WEIGHTED, 1.0)
+    return base * _time_decay(delta_seconds, window_seconds)
 
 
 def tokenize(text: str) -> set[str]:
@@ -151,6 +231,7 @@ def detect_semantic_payment_scope(
         (i, tokenize(ev.text)) for i, ev in enumerate(events)
     ]
 
+    window_seconds = int(WINDOW.total_seconds())
     out: list[Correlation] = []
     for fr in frs:
         fr_tokens = tokenize(fr.descricao or "")
@@ -167,13 +248,24 @@ def detect_semantic_payment_scope(
             n = len(shared)
             if n < MIN_OVERLAP:
                 continue
-            confidence = min(n / CONFIDENCE_OVERLAP_MAX, 1.0)
             delta = int((ev.timestamp - fr.timestamp).total_seconds())
+            confidence = _weighted_confidence(
+                shared, delta, window_seconds,
+            )
             shared_sorted = sorted(shared)
             sample = shared_sorted[:5]
+            # Explica quais sao HIGH/LOW pra auditabilidade forense
+            shared_annotated = ",".join(
+                f"{t}*" if t in HIGH_SPECIFICITY_STEMS
+                else f"{t}~" if t in LOW_SPECIFICITY_STEMS
+                else t
+                for t in sample
+            )
             rationale = (
-                f"overlap de {n} termo(s): {','.join(sample)}"
-                f"{'...' if n > 5 else ''} (delta={delta:+d}s)"
+                f"overlap de {n} termo(s): {shared_annotated}"
+                f"{'...' if n > 5 else ''} "
+                f"(delta={delta:+d}s, "
+                f"decay={_time_decay(delta, window_seconds):.2f})"
             )
             out.append(Correlation(
                 obra=obra,
@@ -191,11 +283,17 @@ def detect_semantic_payment_scope(
 
 
 __all__ = [
-    "CONFIDENCE_OVERLAP_MAX",
+    "CONFIDENCE_SATURATION_WEIGHTED",
     "DETECTOR_ID",
+    "HIGH_SPECIFICITY_STEMS",
+    "LOW_SPECIFICITY_STEMS",
     "MIN_OVERLAP",
     "MIN_TOKEN_LEN",
     "STOPWORDS",
+    "TIME_DECAY_FLOOR",
+    "TOKEN_WEIGHT_DEFAULT",
+    "TOKEN_WEIGHT_HIGH",
+    "TOKEN_WEIGHT_LOW",
     "WINDOW",
     "detect_semantic_payment_scope",
     "tokenize",
