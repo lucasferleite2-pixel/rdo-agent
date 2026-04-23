@@ -81,6 +81,20 @@ def _check_valores_preservados(
     return (len(warnings) == 0, warnings)
 
 
+def _horario_pattern(hhmm: str) -> str:
+    """
+    Pattern regex que match um HH:MM do dossier em qualquer estilo comum
+    de narrativa PT-BR:
+      - "11:13" (colon, estilo canonico)
+      - "11h13" (h estilo brasileiro usual)
+      - "11:13:00" (com segundos)
+      - "11h13min" (estilo formal) — opcional suffix "min"
+    """
+    hh, mm = hhmm.split(":")
+    # \b{HH}[:h]{MM}(?::\d{2}|min)?\b
+    return rf"\b{re.escape(hh)}[:h]{re.escape(mm)}(?::\d{{2}}|min)?\b"
+
+
 def _check_horarios_preservados(
     narrative: str, dossier: dict,
 ) -> tuple[bool, list[str]]:
@@ -92,7 +106,11 @@ def _check_horarios_preservados(
     horarios.discard("--:--")
     if not horarios:
         return True, []
-    found = any(re.search(rf"\b{re.escape(h)}\b", narrative) for h in horarios)
+    found = any(
+        re.search(_horario_pattern(h), narrative)
+        for h in horarios
+        if h and ":" in h
+    )
     if not found:
         return False, [
             f"nenhum horario do timeline ({len(horarios)} disponiveis) "

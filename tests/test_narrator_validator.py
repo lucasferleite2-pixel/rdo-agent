@@ -129,6 +129,51 @@ def test_validate_fails_when_no_horario():
     assert result["passed"] is False
 
 
+def test_validate_accepts_hhmm_with_h_separator():
+    """Regex aceita estilo PT-BR '11h13' alem de '11:13'."""
+    narrative = (
+        "# Narrativa: x\n\n"
+        "As 11h13 ocorreu o evento. " * 15
+        + "R$ 3.500,00 pago. " * 10
+        + "\n\n---"
+    )
+    result = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+    )
+    assert result["checks"]["horarios_preservados"] is True
+
+
+def test_validate_accepts_hhmm_with_seconds():
+    """Regex aceita '11:13:00'."""
+    narrative = (
+        "# Narrativa: x\n\n"
+        "No timestamp 11:13:00 registrou-se o PIX. " * 15
+        + "R$ 3.500,00 pago. " * 10
+        + "\n\n---"
+    )
+    result = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+    )
+    assert result["checks"]["horarios_preservados"] is True
+
+
+def test_validate_accepts_hhmmin_brazilian_style():
+    """Regex aceita '11h13min' (estilo formal)."""
+    narrative = (
+        "# Narrativa: x\n\n"
+        "As 11h13min aconteceu o evento. " * 15
+        + "R$ 3.500,00 pago. " * 10
+        + "\n\n---"
+    )
+    result = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+    )
+    assert result["checks"]["horarios_preservados"] is True
+
+
 def test_validate_fails_when_no_abertura():
     narrative = "Texto sem header.\n\n" + ("09:00 R$ 3.500,00 " * 30)
     result = validate_narrative(
