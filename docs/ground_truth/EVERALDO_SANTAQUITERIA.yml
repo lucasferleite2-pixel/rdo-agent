@@ -1,0 +1,106 @@
+# Ground Truth — Canal WhatsApp Lucas ↔ Everaldo (serralheiro)
+# Obra real: Reforma da EE Povoado de Santa Quitéria
+# Fornecido por: Lucas Fernandes Leite em 23/04/2026
+# Uso: base de verificação para rdo-agent Fase C (Ground Truth Injection)
+
+obra_real:
+  nome: "Reforma da Escola Estadual Povoado de Santa Quitéria"
+  codesc: 75817
+  municipio: Santana do Manhuaçu
+  uf: MG
+  contratante_publico: "SEE-MG / SRE Manhuaçu"
+  contratada: "Vale Nobre Construtora e Imobiliária Ltda"
+
+canal:
+  id: EVERALDO_SANTAQUITERIA
+  tipo: whatsapp
+  parte_A:
+    nome: "Lucas Fernandes Leite"
+    papel: representante_vale_nobre
+  parte_B:
+    nome: "Everaldo Caitano Baia"
+    papel: prestador_servico
+    especialidade: serralheiro
+
+contratos:
+  - id: C1
+    escopo: "Estrutura bruta: tesouras + terças + esqueleto do fechamento"
+    valor_total: 7000.00
+    forma_pagamento: "50/50 — sinal + saldo na conclusão"
+    origem: whatsapp_06_04_2026
+    data_acordo: "2026-04-06"
+    observacao: "Negociação iniciada 04/04, sem acordo em 04-05/04; fechamento em 06/04 no mesmo dia do sinal"
+    status: quitado
+
+  - id: C2
+    escopo: "Acabamento completo: telhado completo + fechamento lateral (tela/alambrado)"
+    valor_total: 11000.00
+    forma_pagamento: "50/50 — sinal + saldo na conclusão"
+    origem: whatsapp_08_04_2026
+    data_acordo: "2026-04-08"
+    observacao: "Inclui complemento do fechamento (esqueleto estava no C1) + alambrado"
+    status: em_execucao_50pct_pago
+
+pagamentos_confirmados:
+  - valor: 3500.00
+    data: "2026-04-06"
+    hora: "11:13"
+    contrato_ref: C1
+    parcela: sinal_50pct
+    descricao_pix: "50% de sinal do serviço de serralheria (subir e instalar tesouras e terças do telhado e fechamento)"
+    nota: "Descrição menciona 'fechamento' referindo-se ao ESQUELETO (C1), não ao fechamento com tela (C2)"
+
+  - valor: 3500.00
+    data: "2026-04-10"
+    hora: "12:42"
+    contrato_ref: C1
+    parcela: saldo_50pct
+    descricao_pix: null
+    nota: "Saldo do C1 após conclusão da instalação do esqueleto"
+
+  - valor: 30.00
+    data: "2026-04-14"
+    hora: "13:43"
+    tipo: reembolso_operacional
+    contrato_ref: null
+    descricao_pix: "Gasolina tinta"
+    nota: "Reembolso de combustível para solvente de tinta, fora dos contratos principais"
+
+  - valor: 5500.00
+    data: "2026-04-16"
+    hora: "10:17"
+    contrato_ref: C2
+    parcela: sinal_50pct
+    descricao_pix: "Metade do serviço telhado"
+    nota: "Sinal 50% do C2; saldo (R$5.500) fica pendente até conclusão"
+
+pagamentos_pendentes:
+  - valor: 5500.00
+    contrato_ref: C2
+    parcela: saldo_50pct
+    gatilho_pagamento: conclusao_do_servico
+    data_prevista: null
+    nota: "Será pago quando Everaldo finalizar telhado + fechamento + alambrado"
+
+totais:
+  valor_negociado_total: 18000.00
+  valor_pago_total: 12530.00
+  valor_pago_contratual: 12500.00
+  valor_pendente: 5500.00
+  pct_concluido_financeiramente: 69.4
+
+estado_atual:
+  data_snapshot: "2026-04-23"
+  obra_em_execucao: true
+  everaldo_ainda_no_canteiro: true
+  c1_status: quitado
+  c2_status: em_execucao_50pct_pago
+  problemas_conhecidos:
+    - descricao: "Alambrado teve medidas erradas feitas por terceiros antes da intervenção do Everaldo"
+      detectado_em: "2026-04-15"
+      impacto: "retrabalho extenso, atraso no cronograma"
+      responsabilidade: terceiros_anteriores
+
+aspectos_nao_registrados_em_evidencia:
+  - "Negociações entre 04-05/04 (sem acordo) podem ter tido comunicação fora do WhatsApp"
+  - "Nenhum contrato escrito formal foi firmado; acordos são verbais via áudio WhatsApp"
