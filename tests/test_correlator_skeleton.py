@@ -70,18 +70,17 @@ def test_correlation_allows_null_time_gap():
 
 
 # ---------------------------------------------------------------------------
-# Stubs levantam NotImplementedError
+# Fase B implementada — sem NotImplementedError; com DB vazio retornam []
 # ---------------------------------------------------------------------------
 
 
-def test_find_correlations_for_day_raises_not_implemented(db):
-    with pytest.raises(NotImplementedError, match="Fase B"):
-        find_correlations_for_day(db, "OBRA_X", "2026-04-06")
+def test_find_correlations_for_day_empty_db_returns_empty(db):
+    """Sem financial_records/classifications, retorna lista vazia."""
+    assert find_correlations_for_day(db, "OBRA_X", "2026-04-06") == []
 
 
-def test_find_correlations_obra_wide_raises_not_implemented(db):
-    with pytest.raises(NotImplementedError, match="Fase B"):
-        find_correlations_obra_wide(db, "OBRA_X")
+def test_find_correlations_obra_wide_empty_db_returns_empty(db):
+    assert find_correlations_obra_wide(db, "OBRA_X") == []
 
 
 # ---------------------------------------------------------------------------

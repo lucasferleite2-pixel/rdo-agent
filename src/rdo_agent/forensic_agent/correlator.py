@@ -1,26 +1,24 @@
 """
-CORRELATOR — Esqueleto Fase B (Sprint 5).
+CORRELATOR — Sprint 5 Fase B.
 
-NESTA SESSAO (Fase A): contrato apenas. Implementacao real na proxima sessao.
+Orquestrador dos detectores rule-based. Modelo pairwise 1:1 (uma
+Correlation = uma aresta entre dois eventos).
 
-TODO Fase B:
-  - Implementar find_payment_intent_before_execution (rule-based):
-    texto 'manda a chave', 'pix', 'transferir' seguido por
-    financial_record em <30min
-  - Implementar find_audio_mentions_matching_photos:
-    audio menciona material/atividade + foto do mesmo material/
-    atividade no mesmo dia
-  - Implementar find_material_discussions_before_delivery:
-    discussoes sobre material X + evento de entrega/recebimento
-    posterior
-  - Integrar LLM-based correlation pra casos complexos (Sonnet 4.6)
-
-Este modulo exporta:
-  - Correlation dataclass (schema alinhado com tabela correlations)
-  - find_correlations_for_day / find_correlations_obra_wide
-    (stubs que levantam NotImplementedError — sinalizam contrato
-    publico sem bloquear imports)
-  - save_correlation helper pra Fase B plumar resultados em DB
+Exporta:
+  - `Correlation` (dataclass alinhado com tabela correlations)
+  - `EventSource` (Literal)
+  - `save_correlation(conn, c)`: persiste 1 Correlation. Retorna id.
+  - `detect_correlations(conn, obra, *, persist=True)`: roda os 3
+    detectores (temporal, semantic, math), persiste (opcional) e
+    retorna list[Correlation].
+  - `get_correlations(conn, obra, *, filter_type=None, min_confidence=0.0)`:
+    consulta a tabela correlations (nao roda detectores).
+  - `delete_correlations_for_obra(conn, obra)`: remove todas as linhas
+    da obra. Usado pelo --rebuild da CLI.
+  - `find_correlations_for_day(conn, obra, date)`,
+    `find_correlations_obra_wide(conn, obra)`: wrappers retrocompativeis
+    que NAO persistem (usam os detectores in-memory); o find_for_day
+    filtra por data do primary_event (financial_record.data_transacao).
 """
 
 from __future__ import annotations
@@ -57,52 +55,109 @@ class Correlation:
     detected_by: str
 
 
+def detect_correlations(
+    conn: sqlite3.Connection, obra: str, *, persist: bool = True,
+) -> list[Correlation]:
+    """
+    Roda os 3 detectores rule-based (temporal, semantic, math) sobre a
+    obra e opcionalmente persiste. Retorna a lista concatenada.
+
+    Import lazy dos detectores pra nao criar ciclo de importacao (o
+    pacote detectors re-exporta estes nomes).
+    """
+    # Import lazy: detectors -> _common -> correlator (Correlation).
+    from rdo_agent.forensic_agent.detectors.math import (
+        detect_math_relations,
+    )
+    from rdo_agent.forensic_agent.detectors.semantic import (
+        detect_semantic_payment_scope,
+    )
+    from rdo_agent.forensic_agent.detectors.temporal import (
+        detect_temporal_payment_context,
+    )
+
+    out: list[Correlation] = []
+    out.extend(detect_temporal_payment_context(conn, obra))
+    out.extend(detect_semantic_payment_scope(conn, obra))
+    out.extend(detect_math_relations(conn, obra))
+
+    if persist:
+        for c in out:
+            save_correlation(conn, c)
+    return out
+
+
+def get_correlations(
+    conn: sqlite3.Connection, obra: str, *,
+    filter_type: str | None = None,
+    min_confidence: float = 0.0,
+) -> list[Correlation]:
+    """
+    Consulta a tabela correlations (NAO roda detectores).
+
+    `filter_type`: se fornecido, filtra por correlation_type exato.
+    `min_confidence`: threshold inclusivo (>=).
+    """
+    sql = "SELECT * FROM correlations WHERE obra = ? AND confidence >= ?"
+    params: list[object] = [obra, min_confidence]
+    if filter_type is not None:
+        sql += " AND correlation_type = ?"
+        params.append(filter_type)
+    sql += " ORDER BY primary_event_ref, related_event_ref"
+    rows = conn.execute(sql, params).fetchall()
+    return [
+        Correlation(
+            obra=r["obra"],
+            correlation_type=r["correlation_type"],
+            primary_event_ref=r["primary_event_ref"],
+            primary_event_source=r["primary_event_source"],
+            related_event_ref=r["related_event_ref"],
+            related_event_source=r["related_event_source"],
+            time_gap_seconds=r["time_gap_seconds"],
+            confidence=r["confidence"],
+            rationale=r["rationale"],
+            detected_by=r["detected_by"],
+        )
+        for r in rows
+    ]
+
+
+def delete_correlations_for_obra(
+    conn: sqlite3.Connection, obra: str,
+) -> int:
+    """Remove todas as correlations da obra. Retorna count removido."""
+    cur = conn.execute("DELETE FROM correlations WHERE obra = ?", (obra,))
+    conn.commit()
+    return cur.rowcount
+
+
 def find_correlations_for_day(
     conn: sqlite3.Connection, obra: str, date: str,
 ) -> list[Correlation]:
     """
-    TODO Fase B — Retorna correlacoes detectadas para um dia especifico.
-
-    Regras planejadas:
-      1. payment_intent_before_execution: texto 'manda a chave', 'pix',
-         'transferir' seguido de financial_record em <30min
-      2. audio_mentions_matching_photos: audio menciona material/atividade
-         + foto do mesmo material/atividade no mesmo dia
-      3. cronograma_vs_execution: promessa de execucao em data X
-         + reporte de execucao em data Y
-
-    Args:
-        conn: conexao SQLite
-        obra: CODESC
-        date: YYYY-MM-DD
-
-    Returns:
-        Lista de Correlation detectadas para o dia.
+    Retorna correlacoes cujo primary_event (financial_record) foi em
+    `date` (YYYY-MM-DD). Roda os detectores in-memory (nao persiste).
+    Se nao houver correlations persistidas, chamador pode usar
+    `detect_correlations(conn, obra, persist=True)` primeiro.
     """
-    raise NotImplementedError(
-        "Fase B — find_correlations_for_day: implementacao planejada para "
-        "proxima sessao. Ver TODO no header do modulo."
-    )
+    all_corr = detect_correlations(conn, obra, persist=False)
+    # Filtra: primary_event_ref = 'fr_<id>' cuja data bate com date
+    fr_ids_on_date = {
+        f"fr_{r['id']}"
+        for r in conn.execute(
+            "SELECT id FROM financial_records "
+            "WHERE obra = ? AND data_transacao = ?",
+            (obra, date),
+        )
+    }
+    return [c for c in all_corr if c.primary_event_ref in fr_ids_on_date]
 
 
 def find_correlations_obra_wide(
     conn: sqlite3.Connection, obra: str,
 ) -> list[Correlation]:
-    """
-    TODO Fase B — Correlacoes que cruzam dias da obra inteira.
-
-    Regras planejadas:
-      1. recurring_payment_pattern: pagamentos recorrentes em intervalos
-         similares
-      2. contract_then_execution: fechamento de contrato + execucao
-         subsequente
-      3. escalation_pattern: volume de mensagens crescente antes de
-         pagamento
-    """
-    raise NotImplementedError(
-        "Fase B — find_correlations_obra_wide: implementacao planejada para "
-        "proxima sessao."
-    )
+    """Alias de `detect_correlations(conn, obra, persist=False)`."""
+    return detect_correlations(conn, obra, persist=False)
 
 
 def save_correlation(
@@ -141,7 +196,10 @@ def save_correlation(
 __all__ = [
     "Correlation",
     "EventSource",
+    "delete_correlations_for_obra",
+    "detect_correlations",
     "find_correlations_for_day",
     "find_correlations_obra_wide",
+    "get_correlations",
     "save_correlation",
 ]

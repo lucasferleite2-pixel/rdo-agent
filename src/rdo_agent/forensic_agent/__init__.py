@@ -45,8 +45,11 @@ from __future__ import annotations
 from rdo_agent.forensic_agent.correlator import (
     Correlation,
     EventSource,
+    delete_correlations_for_obra,
+    detect_correlations,
     find_correlations_for_day,
     find_correlations_obra_wide,
+    get_correlations,
     save_correlation,
 )
 from rdo_agent.forensic_agent.types import (
@@ -84,14 +87,17 @@ __all__ = [
     "narrate",
     "save_narrative",
     "validate_narrative",
-    # Fase B esqueleto
+    # Fase B
     "CONFIDENCE_HIGH",
     "CONFIDENCE_LOW",
     "CONFIDENCE_MEDIUM",
     "Correlation",
     "CorrelationType",
     "EventSource",
+    "delete_correlations_for_obra",
+    "detect_correlations",
     "find_correlations_for_day",
     "find_correlations_obra_wide",
+    "get_correlations",
     "save_correlation",
 ]
