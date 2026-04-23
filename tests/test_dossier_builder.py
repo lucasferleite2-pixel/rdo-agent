@@ -257,8 +257,12 @@ def test_build_overview_small_obra_returns_all_events(db):
     assert len(d["events_timeline"]) == 5
 
 
-def test_build_overview_large_obra_samples_first_and_last(db):
-    """>50 eventos: amostra primeiros 30 + ultimos 20."""
+def test_build_overview_large_obra_samples_first_last_plus_dense_days(db):
+    """
+    >50 eventos: amostra primeiros 30 + ultimos 20 UNIAO com todos os
+    eventos dos top-5 dias com mais eventos (divida #28). Dias
+    sao todos o mesmo aqui, entao sample cobre TUDO (unico dia denso).
+    """
     total = OVERVIEW_SAMPLE_FIRST_N + OVERVIEW_SAMPLE_LAST_N + 20
     for i in range(total):
         hour = 8 + (i % 10)
@@ -269,7 +273,48 @@ def test_build_overview_large_obra_samples_first_and_last(db):
         )
     d = build_obra_overview_dossier(db, "OVBIG")
     assert d["events_total_in_obra"] == total
-    assert d["events_sampled"] == OVERVIEW_SAMPLE_FIRST_N + OVERVIEW_SAMPLE_LAST_N
+    # Unico dia denso => todos eventos entram via top-dense-days
+    assert d["events_sampled"] == total
+
+
+def test_build_overview_includes_dense_day_events_not_just_extremes(db):
+    """
+    Divida #28 regressao: dia denso no meio do corpus deve estar na
+    amostra mesmo quando ficaria fora do first-30+last-20 padrao.
+    """
+    # 60 eventos em 2026-04-01 (forma o first-30 + part of middle)
+    for i in range(60):
+        _seed_classification_transcription(
+            db, obra="OVDENSE", idx=1000 + i, date="2026-04-01",
+            hhmm=f"{8 + i // 8:02d}:{(i * 7) % 60:02d}",
+            text=f"early {i}",
+        )
+    # 48 eventos em 2026-04-08 (DIA DENSO ao meio — deve entrar)
+    for i in range(48):
+        _seed_classification_transcription(
+            db, obra="OVDENSE", idx=2000 + i, date="2026-04-08",
+            hhmm=f"{8 + i // 5:02d}:{(i * 11) % 60:02d}",
+            text=f"dense {i}",
+        )
+    # 30 eventos em 2026-04-15 (last-N anchor)
+    for i in range(30):
+        _seed_classification_transcription(
+            db, obra="OVDENSE", idx=3000 + i, date="2026-04-15",
+            hhmm=f"{8 + i // 4:02d}:{(i * 13) % 60:02d}",
+            text=f"late {i}",
+        )
+    d = build_obra_overview_dossier(db, "OVDENSE")
+    # Total de eventos
+    assert d["events_total_in_obra"] == 60 + 48 + 30
+    # Verifica que ALGUM evento do dia 08/04 esta no sample (diferente
+    # do comportamento antigo que perdia esse dia)
+    sampled_dates = {e["event_date"] for e in d["events_timeline"]}
+    assert "2026-04-08" in sampled_dates
+    # E mais: todos os eventos do dia denso devem estar la
+    sampled_dense = [
+        e for e in d["events_timeline"] if e["event_date"] == "2026-04-08"
+    ]
+    assert len(sampled_dense) == 48
 
 
 def test_build_overview_daily_summaries(db):

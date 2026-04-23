@@ -32,6 +32,15 @@ log = get_logger(__name__)
 CONTENT_FULL_MAX_CHARS = 500
 OVERVIEW_SAMPLE_FIRST_N = 30
 OVERVIEW_SAMPLE_LAST_N = 20
+OVERVIEW_TOP_DENSE_DAYS = 5
+"""
+Dividia #28: antes `build_obra_overview_dossier` amostrava so os
+primeiros 30 + ultimos 20 eventos (50 total), perdendo dias de alta
+densidade narrativa (ex: 08/04 do piloto com 48 eventos — totalmente
+fora da amostra). Novo criterio: ALL eventos dos top-5 dias com mais
+eventos, UNIAO com primeiros-N + ultimos-N pra preservar ancora
+temporal.
+"""
 
 # Correlation validation threshold (ja persistida, usamos pra filtrar
 # o top_validated no obra_overview e marcar "validated" no day)
@@ -392,20 +401,48 @@ def build_obra_overview_dossier(
     stats = _compute_statistics(all_events)
     hints = _compute_context_hints(all_events, financial_records)
 
-    # Sample se muito grande
-    if len(all_events) > (OVERVIEW_SAMPLE_FIRST_N + OVERVIEW_SAMPLE_LAST_N):
-        sampled = (
-            all_events[:OVERVIEW_SAMPLE_FIRST_N]
-            + all_events[-OVERVIEW_SAMPLE_LAST_N:]
-        )
-    else:
-        sampled = all_events
-
-    # Daily summaries
+    # Daily summaries (construido antes do sample pra usar nos top-N)
     by_date: dict[str, list[dict]] = {}
     for e in all_events:
         d = e.get("event_date") or "(sem_data)"
         by_date.setdefault(d, []).append(e)
+
+    # Sample — divida #28 fixed:
+    # Se corpus eh pequeno, usa tudo
+    # Se grande, UNIAO de:
+    #   - ALL eventos dos top-5 dias com mais eventos (densidade narrativa)
+    #   - primeiros-30 eventos (ancora temporal inicial)
+    #   - ultimos-20 eventos (ancora temporal final)
+    # Deduplicado por event.id, reordenado cronologicamente.
+    if len(all_events) <= (OVERVIEW_SAMPLE_FIRST_N + OVERVIEW_SAMPLE_LAST_N):
+        sampled = all_events
+    else:
+        top_dense_dates = [
+            d for d, _ in sorted(
+                by_date.items(), key=lambda kv: -len(kv[1]),
+            )[:OVERVIEW_TOP_DENSE_DAYS]
+        ]
+        dense_events: list[dict] = []
+        for d in top_dense_dates:
+            dense_events.extend(by_date[d])
+
+        combined: list[dict] = (
+            all_events[:OVERVIEW_SAMPLE_FIRST_N]
+            + dense_events
+            + all_events[-OVERVIEW_SAMPLE_LAST_N:]
+        )
+        # Dedup preservando ordem cronologica do all_events
+        seen_ids: set[str] = set()
+        unique: list[dict] = []
+        for e in combined:
+            eid = e.get("id") or ""
+            if eid in seen_ids:
+                continue
+            seen_ids.add(eid)
+            unique.append(e)
+        # Reordena cronologicamente
+        unique.sort(key=lambda e: e.get("timestamp") or "")
+        sampled = unique
 
     daily_summaries = []
     for d, evts in sorted(by_date.items()):
