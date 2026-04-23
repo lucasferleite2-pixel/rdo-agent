@@ -51,6 +51,15 @@ temporal.
 CORRELATION_VALIDATED_THRESHOLD = 0.70
 CORRELATION_OVERVIEW_TOP_N = 10
 
+# Divida #30: amostra de correlacoes nao validadas (conf 0.40-0.70)
+# que o narrator pode usar pra comentar PADROES agregados no
+# obra_overview (nao eventos individuais). Por tipo, pra ser
+# representativo; limitado a N pra nao inflar o prompt.
+CORRELATION_WEAK_LOWER = 0.40
+CORRELATION_WEAK_UPPER = CORRELATION_VALIDATED_THRESHOLD
+CORRELATION_WEAK_TOP_PER_TYPE = 5
+CORRELATION_WEAK_MAX_TOTAL = 15
+
 
 def _extract_date(ts_iso: str | None) -> str:
     if not ts_iso:
@@ -315,6 +324,10 @@ def _fetch_correlations_summary(
 
     Divida #25: `min_correlation_confidence` filtra antes de classificar.
     Default 0.0 mantem retrocompat; CLI usa 0.70.
+
+    Divida #30: tambem inclui `sample_weak` com correlacoes nao-validadas
+    (entre 0.40 e 0.70), ate N por tipo — pra narrator comentar PADROES
+    agregados (nao eventos individuais).
     """
     rows = [dict(r) for r in conn.execute(
         "SELECT * FROM correlations WHERE obra = ? AND confidence >= ? "
@@ -329,11 +342,37 @@ def _fetch_correlations_summary(
         _correlation_row_to_dict(r) for r in rows
         if (r["confidence"] or 0) >= CORRELATION_VALIDATED_THRESHOLD
     ]
+
+    # Amostra de nao-validadas (#30): sempre busca no DB completo
+    # (sem aplicar min_correlation_confidence, pois o usuario quer
+    # VER o que esta sendo filtrado).
+    weak_rows_by_type: dict[str, list[dict]] = {}
+    weak_query = conn.execute(
+        "SELECT * FROM correlations "
+        "WHERE obra = ? AND confidence >= ? AND confidence < ? "
+        "ORDER BY confidence DESC",
+        (obra, CORRELATION_WEAK_LOWER, CORRELATION_WEAK_UPPER),
+    )
+    for r in weak_query.fetchall():
+        d = dict(r)
+        t = d["correlation_type"]
+        bucket = weak_rows_by_type.setdefault(t, [])
+        if len(bucket) < CORRELATION_WEAK_TOP_PER_TYPE:
+            bucket.append(_correlation_row_to_dict(d))
+
+    sample_weak: list[dict] = []
+    for bucket in weak_rows_by_type.values():
+        sample_weak.extend(bucket)
+    # Ordena por confidence desc e limita ao max total
+    sample_weak.sort(key=lambda c: -c["confidence"])
+    sample_weak = sample_weak[:CORRELATION_WEAK_MAX_TOTAL]
+
     return {
         "total": len(rows),
         "by_type": by_type,
         "validated_count": len(validated),
         "top_validated": validated[:CORRELATION_OVERVIEW_TOP_N],
+        "sample_weak": sample_weak,
     }
 
 

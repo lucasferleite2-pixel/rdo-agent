@@ -412,6 +412,76 @@ def test_build_day_dossier_min_correlation_conf_filters(db):
     assert d_strict["correlations"] == []
 
 
+def test_build_overview_includes_sample_weak(db):
+    """Divida #30: sample_weak contem correlacoes 0.40-0.70 (top N por tipo)."""
+    _seed_classification_transcription(
+        db, obra="OSW", idx=1, date="2026-04-06", text="e",
+    )
+    _seed_financial_record(
+        db, obra="OSW", idx=1, date="2026-04-06",
+        valor_centavos=100000, descricao="sinal",
+    )
+    now = "2026-04-22T00:00:00Z"
+    # 3 weak (0.4, 0.5, 0.6) + 1 validated (0.9) + 1 low (0.3 - fora do
+    # range weak)
+    for conf, ctype in [
+        (0.4, "SEMANTIC_PAYMENT_SCOPE"),
+        (0.5, "SEMANTIC_PAYMENT_SCOPE"),
+        (0.6, "MATH_VALUE_DIVERGENCE"),
+        (0.9, "MATH_VALUE_MATCH"),
+        (0.3, "TEMPORAL_PAYMENT_CONTEXT"),
+    ]:
+        db.execute(
+            """INSERT INTO correlations (obra, correlation_type,
+            primary_event_ref, primary_event_source,
+            related_event_ref, related_event_source, time_gap_seconds,
+            confidence, rationale, detected_by, created_at)
+            VALUES ('OSW', ?, 'fr_1', 'financial_record', 'c_1',
+                    'classification', 0, ?, 'r', 'x', ?)""",
+            (ctype, conf, now),
+        )
+    db.commit()
+    d = build_obra_overview_dossier(db, "OSW")
+    sw = d["correlations_summary"]["sample_weak"]
+    # 3 weak (0.4, 0.5, 0.6) — 0.3 fica fora, 0.9 eh validated
+    assert len(sw) == 3
+    confs = sorted([c["confidence"] for c in sw], reverse=True)
+    assert confs == [0.6, 0.5, 0.4]
+
+
+def test_build_overview_sample_weak_caps_per_type(db):
+    """sample_weak limita TOP_PER_TYPE=5 por tipo."""
+    from rdo_agent.forensic_agent.dossier_builder import (
+        CORRELATION_WEAK_TOP_PER_TYPE,
+    )
+    _seed_classification_transcription(
+        db, obra="OSC", idx=1, date="2026-04-06", text="e",
+    )
+    _seed_financial_record(
+        db, obra="OSC", idx=1, date="2026-04-06",
+        valor_centavos=100000, descricao="sinal",
+    )
+    now = "2026-04-22T00:00:00Z"
+    # Insere 8 weak SEMANTIC => deve cappar em TOP_PER_TYPE=5
+    for i in range(8):
+        conf = 0.4 + i * 0.01
+        db.execute(
+            """INSERT INTO correlations (obra, correlation_type,
+            primary_event_ref, primary_event_source,
+            related_event_ref, related_event_source, time_gap_seconds,
+            confidence, rationale, detected_by, created_at)
+            VALUES ('OSC', 'SEMANTIC_PAYMENT_SCOPE', 'fr_1',
+                    'financial_record', 'c_1', 'classification', 0,
+                    ?, ?, 'x', ?)""",
+            (conf, f"rat {i}", now),
+        )
+    db.commit()
+    d = build_obra_overview_dossier(db, "OSC")
+    sw = d["correlations_summary"]["sample_weak"]
+    # So ha 1 tipo e cap eh 5 por tipo, limit total 15
+    assert len(sw) == CORRELATION_WEAK_TOP_PER_TYPE
+
+
 def test_build_overview_min_correlation_conf_filters(db):
     _seed_classification_transcription(
         db, obra="OTHV", idx=1, date="2026-04-06", text="e",
