@@ -264,3 +264,62 @@ tests/
 
 - Sessao: **US$ 0.38**
 - Acumulado Sprint 5 (Fase A + Fase B): ~US$ 0.38 (Fase A foi mockado)
+
+---
+
+## Addendum — Validação em Caso Real (2026-04-23 tarde)
+
+### Descoberta forense
+
+Após conclusão da Fase B, o operador Lucas forneceu ground truth sobre a obra
+EVERALDO_SANTAQUITERIA: existem 2 contratos separados (R$7.000 + R$11.000 = R$18.000
+total negociado), não 1 contrato único de R$11.000 como narrativas anteriores inferiram.
+
+### Validação pelo correlator
+
+O detector MATH_VALUE_DIVERGENCE da Fase B detectou automaticamente a inconsistência:
+- fr_1 (PIX R$3.500 em 06/04) correlacionado com c_31 mencionando "R$3.000" (confidence 0.6)
+- Correlacion não-validada mas sinalizada como ponto de atenção
+
+Investigação manual dos eventos correlacionados (c_31, c_60, c_69) revelou que
+a evidência dos 2 contratos ESTÁ no corpus, em áudios do dia 08/04:
+- c_31 (08/04 08h46): Everaldo decompõe R$15k em componentes (R$9k + R$3k + R$3k)
+- c_60 (08/04 20h36): "vamos fechar nos 11" + empilhamento de pagamentos dos 2 contratos
+- c_69 (09/04 16h15): menciona "os 11 lá" + pedido de adiantamento R$3k pra operário
+
+### Narrativa 08/04 gerada pós-descoberta
+
+Com correlações populadas e eventos densos disponíveis, a narrativa day_2026-04-08.md:
+- Reconstruiu a renegociação R$15k → R$11k minuto a minuto
+- Identificou corretamente a estrutura de 2 contratos (R$7k engradamento + R$11k cobertura)
+- Detectou mensagem apagada às 09h13 (possível retratação)
+- Detectou repasse R$2.000 a terceiro (c_62) como ponto de atenção
+- Usou MATH_VALUE_MATCH validada para vincular pagamentos à negociação
+- Cita MATH_VALUE_DIVERGENCE com confidence 0.6 com cautela forense
+
+Qualidade self-assessment: 0.82 confidence.
+
+### Implicação para Fase C (Ground Truth)
+
+A expectativa inicial era que GT seria necessário para suprir ausência de evidência.
+Descoberta: evidência ESTAVA no corpus — faltava apenas correlator para direcionar
+atenção + dossier amostrar eventos certos.
+
+GT continua valiosa mas com propósito reposicionado:
+- ANTES: "fornecer dados ausentes"
+- AGORA: "orientar interpretação estruturada"
+
+Fase C permanece no roadmap como feature de polimento forense, não como dependência crítica.
+
+### Dívidas técnicas novas
+
+- #22: MATH_VALUE_MATCH duplica linhas idênticas no DB
+- #23: MATH_VALUE_MATCH sem janela temporal (gap 77h correlacionado)
+- #26: Detector MATH não diferencia valor unitário vs agregado
+- #27: Detector futuro CONTRACT_RENEGOTIATION para padrões tipo "fecha em X"
+- #28: dossier_builder.build_obra_overview_dossier deveria priorizar amostragem
+       de eventos em dias de alta densidade narrativa
+
+### Tag produzida
+
+v0.6.1-case-validated — Sprint 5 Fase B validada em caso real.
