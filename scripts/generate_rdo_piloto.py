@@ -366,6 +366,90 @@ def _render_financial_section(
     return lines
 
 
+# ---------------------------------------------------------------------------
+# Sprint 5 Fase B — integracao correlations rule-based
+# ---------------------------------------------------------------------------
+
+
+CORRELATION_VALIDATED_THRESHOLD = 0.70
+
+
+def _fetch_correlations_for_date(
+    conn: sqlite3.Connection, obra: str, date_str: str,
+    classified_rows: list[sqlite3.Row],
+) -> list[sqlite3.Row]:
+    """
+    Correlacoes do dia: primary_event eh fr do dia OU related_event eh
+    cls presente em `classified_rows` (mesmo dia). Ordenadas por
+    confidence desc, correlation_type asc.
+    """
+    fr_ids = [
+        r["id"] for r in conn.execute(
+            "SELECT id FROM financial_records "
+            "WHERE obra = ? AND data_transacao = ?",
+            (obra, date_str),
+        )
+    ]
+    fr_refs = {f"fr_{i}" for i in fr_ids}
+    cls_refs = {f"c_{r['classification_id']}" for r in classified_rows}
+    all_refs = list(fr_refs | cls_refs)
+    if not all_refs:
+        return []
+    placeholders = ",".join("?" * len(all_refs))
+    sql = (
+        f"SELECT * FROM correlations WHERE obra = ? AND "
+        f"(primary_event_ref IN ({placeholders}) "
+        f"OR related_event_ref IN ({placeholders})) "
+        f"ORDER BY confidence DESC, correlation_type"
+    )
+    return list(conn.execute(sql, (obra, *all_refs, *all_refs)).fetchall())
+
+
+def _render_correlations_section(
+    correlations: list[sqlite3.Row],
+) -> list[str]:
+    """
+    Renderiza secao markdown de correlacoes detectadas. Vazio -> [].
+    Agrupa por correlation_type; marca com ✅ validadas (conf>=0.70).
+    """
+    if not correlations:
+        return []
+    lines: list[str] = [
+        f"## 🔗 Correlações detectadas ({len(correlations)})",
+        "",
+        "Relações pairwise entre eventos (rule-based, Sprint 5 Fase B). "
+        "✅ = validada (confidence ≥ 0,70).",
+        "",
+    ]
+    grouped: dict[str, list[sqlite3.Row]] = {}
+    for c in correlations:
+        grouped.setdefault(c["correlation_type"], []).append(c)
+    for ctype in sorted(grouped.keys()):
+        items = grouped[ctype]
+        n_val = sum(
+            1 for c in items
+            if (c["confidence"] or 0) >= CORRELATION_VALIDATED_THRESHOLD
+        )
+        lines.append(f"### `{ctype}` ({len(items)} total, {n_val} validadas)")
+        lines.append("")
+        for c in items:
+            badge = (
+                "✅" if (c["confidence"] or 0) >= CORRELATION_VALIDATED_THRESHOLD
+                else "·"
+            )
+            conf = f"{c['confidence']:.2f}" if c["confidence"] is not None else "n/a"
+            gap = c["time_gap_seconds"]
+            gap_str = f"{gap:+d}s" if gap is not None else "n/a"
+            rationale = (c["rationale"] or "").strip()
+            lines.append(
+                f"- {badge} `{c['primary_event_ref']} → "
+                f"{c['related_event_ref']}` conf={conf} gap={gap_str} — "
+                f"{rationale}"
+            )
+        lines.append("")
+    return lines
+
+
 def _format_item_line(
     row: sqlite3.Row,
     *,
@@ -405,6 +489,7 @@ def render_markdown(
     obra: str, date: str, rows: list[sqlite3.Row],
     *, modo_fiscal: bool = False,
     financial_records: list[sqlite3.Row] | None = None,
+    correlations: list[sqlite3.Row] | None = None,
 ) -> str:
     """
     Renderiza RDO em markdown.
@@ -503,6 +588,12 @@ def render_markdown(
     # categorias semanticas) — so aparece se houver comprovantes no dia
     if financial_records:
         lines.extend(_render_financial_section(financial_records))
+
+    # Sprint 5 Fase B: correlacoes rule-based logo apos o ledger financeiro
+    # (contextualizam os pagamentos com o que foi discutido em audio/texto).
+    # Omitida se vazio.
+    if correlations:
+        lines.extend(_render_correlations_section(correlations))
 
     for code, header in CATEGORY_HEADERS:
         if modo_fiscal and code in FISCAL_EXCLUDED_CATEGORIES:
@@ -692,6 +783,8 @@ def generate_rdo(
         )
     # Op10: busca tambem comprovantes financeiros da data (pode ser vazio)
     financial_records = _fetch_financial_records_for_date(conn, obra, date)
+    # Fase B: correlations do dia (pode ser vazio se correlate nao foi rodado)
+    correlations = _fetch_correlations_for_date(conn, obra, date, rows)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     suffix = "_fiscal" if modo_fiscal else ""
@@ -700,6 +793,7 @@ def generate_rdo(
     md_text = render_markdown(
         obra, date, rows, modo_fiscal=modo_fiscal,
         financial_records=financial_records,
+        correlations=correlations,
     )
     md_path.write_text(md_text, encoding="utf-8")
 
