@@ -288,11 +288,11 @@ def test_detect_skips_out_of_range_values(db):
     assert detect_math_relations(db, "OBRA_M") == []
 
 
-def test_detect_skips_cls_outside_7day_window(db):
-    """Cls 10 dias antes — fora da janela."""
+def test_detect_skips_cls_outside_48h_window(db):
+    """Cls 3 dias antes — fora da janela 48h (divida #23)."""
     _seed_transcription_cls(
         db, obra="OBRA_M", idx=1,
-        ts_iso="2026-03-25T10:00:00-03:00",
+        ts_iso="2026-04-03T10:00:00-03:00",
         text="vamos fechar em R$3.500,00",
     )
     _seed_fr(
@@ -300,6 +300,59 @@ def test_detect_skips_cls_outside_7day_window(db):
         valor_centavos=350000,
     )
     assert detect_math_relations(db, "OBRA_M") == []
+
+
+def test_detect_window_is_48h():
+    """Janela reduzida de 7d (OLD) para 48h apos divida #23."""
+    from rdo_agent.forensic_agent.detectors.math import WINDOW
+    assert WINDOW.total_seconds() == 48 * 3600
+
+
+def test_detect_accepts_cls_within_48h(db):
+    """Cls 47h antes — dentro da janela 48h."""
+    _seed_transcription_cls(
+        db, obra="OBRA_M", idx=1,
+        ts_iso="2026-04-04T12:00:00-03:00",  # ~47h antes de 04-06 11:00
+        text="combinado R$3.500,00 pelo telhado",
+    )
+    _seed_fr(
+        db, obra="OBRA_M", idx=1, data="2026-04-06", hora="11:00:00",
+        valor_centavos=350000,
+    )
+    cs = detect_math_relations(db, "OBRA_M")
+    assert len(cs) == 1
+
+
+def test_detect_dedup_same_value_twice_in_one_cls(db):
+    """Mesma cls menciona R$3500 duas vezes — 1 correlation (divida #22)."""
+    _seed_transcription_cls(
+        db, obra="OBRA_M", idx=1,
+        ts_iso="2026-04-06T10:00:00-03:00",
+        text="combinado R$3.500,00 pelo telhado, total R$3.500,00 fechado",
+    )
+    _seed_fr(
+        db, obra="OBRA_M", idx=1, data="2026-04-06",
+        valor_centavos=350000,
+    )
+    cs = detect_math_relations(db, "OBRA_M")
+    # Sem dedup seria 2; com dedup so 1
+    assert len(cs) == 1
+    assert cs[0].correlation_type == CorrelationType.MATH_VALUE_MATCH.value
+
+
+def test_detect_no_dedup_across_different_values(db):
+    """Cls mencionando R$3500 e R$1750 — ambas correlations distintas."""
+    _seed_transcription_cls(
+        db, obra="OBRA_M", idx=1,
+        ts_iso="2026-04-06T10:00:00-03:00",
+        text="total R$3.500,00 com sinal de R$1.750,00",
+    )
+    _seed_fr(
+        db, obra="OBRA_M", idx=1, data="2026-04-06",
+        valor_centavos=350000,
+    )
+    cs = detect_math_relations(db, "OBRA_M")
+    assert len(cs) == 2  # 1 MATCH + 1 INSTALLMENT
 
 
 def test_detect_skips_fr_without_valor(db):

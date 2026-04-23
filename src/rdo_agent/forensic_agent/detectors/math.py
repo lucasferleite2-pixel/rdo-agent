@@ -32,7 +32,14 @@ from rdo_agent.forensic_agent.detectors._common import (
 )
 from rdo_agent.forensic_agent.types import CorrelationType
 
-WINDOW = timedelta(days=7)
+WINDOW = timedelta(hours=48)
+"""
+Janela temporal: +-48h em torno do financial_record. Escolhida apos
+observar (divida #23) que a anterior +-7d correlacionava eventos com
+gap de 77h, gerando ruido narrativo (um valor mencionado muito antes
+ou muito depois raramente indica a mesma transacao quando ja ha
+pagamento intermediario). Configuravel alterando esta constante.
+"""
 
 # R$ prefix obrigatorio pra reduzir falso-positivo (numeros random em
 # texto). Captura: "R$3500", "R$ 3.500", "R$ 3.500,00", "R$3500,00".
@@ -130,12 +137,22 @@ def detect_math_relations(
     if not events:
         return []
 
-    # Pre-extrai valores de cada classification uma vez
-    event_values: list[tuple[int, list[int]]] = [
-        (i, extract_values_cents(ev.text)) for i, ev in enumerate(events)
-    ]
-    # Filtra events sem valores mencionados
-    event_values = [(i, vs) for i, vs in event_values if vs]
+    # Pre-extrai valores de cada classification. Divida #22: dedup
+    # dentro da mesma cls — mencao duplicada do mesmo valor nao deve
+    # emitir 2 Correlations identicas (ex: "R$3.500,00 ... R$3500"
+    # na mesma transcricao).
+    event_values: list[tuple[int, list[int]]] = []
+    for i, ev in enumerate(events):
+        raw = extract_values_cents(ev.text)
+        if raw:
+            # preserva ordem de primeira aparicao, mas unique
+            seen: set[int] = set()
+            uniq: list[int] = []
+            for v in raw:
+                if v not in seen:
+                    seen.add(v)
+                    uniq.append(v)
+            event_values.append((i, uniq))
 
     out: list[Correlation] = []
     for fr in frs:
