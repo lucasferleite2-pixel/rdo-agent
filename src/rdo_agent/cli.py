@@ -975,5 +975,95 @@ def narrate_cmd(
     console.print(f"\n[bold]Custo total:[/bold] US$ {total_cost:.4f}")
 
 
+@main.command(name="correlate")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option(
+    "--rebuild", is_flag=True, default=False,
+    help="Apaga correlations existentes antes de detectar (regenera do zero).",
+)
+@click.option(
+    "--sample", "sample_n", type=int, default=5,
+    help="Quantidade de correlacoes exibidas como amostra (default 5).",
+)
+def correlate_cmd(obra: str, rebuild: bool, sample_n: int) -> None:
+    """
+    Roda detectores rule-based (temporal/semantic/math) e persiste
+    correlacoes. Zero chamadas a API externa.
+    """
+    from collections import Counter
+
+    from rdo_agent.forensic_agent.correlator import (
+        delete_correlations_for_obra,
+        detect_correlations,
+    )
+    from rdo_agent.orchestrator import init_db
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = init_db(vault_path)
+    try:
+        if rebuild:
+            removed = delete_correlations_for_obra(conn, obra)
+            console.print(
+                f"[yellow]- rebuild: {removed} correlations antigas removidas[/yellow]"
+            )
+
+        t0 = time.monotonic()
+        correlations = detect_correlations(conn, obra, persist=True)
+        elapsed = time.monotonic() - t0
+
+        if not correlations:
+            console.print(
+                "[yellow]- nenhuma correlacao detectada (sem "
+                "financial_records ou classifications)[/yellow]"
+            )
+            return
+
+        # Count by type
+        counts = Counter(c.correlation_type for c in correlations)
+        table = Table(
+            title=f"Correlacoes detectadas ({len(correlations)} total, "
+                  f"{elapsed:.2f}s)",
+            show_header=True,
+        )
+        table.add_column("tipo", style="cyan")
+        table.add_column("count", justify="right")
+        table.add_column("conf media", justify="right")
+        for ctype, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+            avg_conf = sum(
+                c.confidence for c in correlations
+                if c.correlation_type == ctype
+            ) / n
+            table.add_row(ctype, str(n), f"{avg_conf:.2f}")
+        console.print("")
+        console.print(table)
+
+        # Sample (highest confidence first)
+        if sample_n > 0:
+            sample = sorted(
+                correlations, key=lambda c: -c.confidence
+            )[:sample_n]
+            console.print(
+                f"\n[bold]Amostra (top {len(sample)} por confidence):[/bold]"
+            )
+            for c in sample:
+                gap = (
+                    f"{c.time_gap_seconds:+d}s"
+                    if c.time_gap_seconds is not None else "n/a"
+                )
+                console.print(
+                    f"  [dim]{c.correlation_type}[/dim] "
+                    f"{c.primary_event_ref} -> {c.related_event_ref} "
+                    f"conf={c.confidence:.2f} gap={gap}\n"
+                    f"    {c.rationale}"
+                )
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     main()
