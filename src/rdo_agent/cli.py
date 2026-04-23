@@ -1040,6 +1040,105 @@ def narrate_cmd(
     console.print(f"\n[bold]Custo total:[/bold] US$ {total_cost:.4f}")
 
 
+@main.command(name="extract-gt")
+@click.option("--obra", required=True, help="Identificador da obra/canal")
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Path do YAML de saida. Default: docs/ground_truth/<OBRA>.yml"
+    ),
+)
+@click.option(
+    "--force", is_flag=True, default=False,
+    help="Sobrescreve YAML existente sem confirmar.",
+)
+@click.option(
+    "--mode",
+    type=click.Choice(["simple", "adaptive"], case_sensitive=False),
+    default=None,
+    help=(
+        "Modo de entrevista: 'simple' (questionario fixo, zero API) "
+        "ou 'adaptive' (Claude Sonnet 4.6 conduz). Default: adaptive "
+        "se ANTHROPIC_API_KEY configurada, senao simple."
+    ),
+)
+def extract_gt_cmd(
+    obra: str, output_path: Path | None, force: bool, mode: str | None,
+) -> None:
+    """Extrai Ground Truth da obra via entrevista interativa (Fase D)."""
+    from rdo_agent.gt_extractor import (
+        InterviewInput,
+        run_adaptive_interview,
+        run_simple_interview,
+        write_ground_truth_yaml,
+    )
+
+    # Resolve output path default
+    if output_path is None:
+        output_path = Path("docs/ground_truth") / f"{obra}.yml"
+
+    if output_path.exists() and not force:
+        console.print(
+            f"[yellow]- Arquivo ja existe: {output_path}[/yellow]"
+        )
+        confirm = click.confirm(
+            "Sobrescrever?", default=False,
+        )
+        if not confirm:
+            console.print("[dim]Abortado. Use --force para pular confirmacao.[/dim]")
+            sys.exit(0)
+
+    # Resolve mode default
+    if mode is None:
+        has_key = bool(config.get().anthropic_api_key)
+        mode = "adaptive" if has_key else "simple"
+    mode = mode.lower()
+
+    inp = InterviewInput(
+        obra=obra,
+        output_path=output_path,
+    )
+    console.print(
+        f"[bold cyan]Extracting GT[/bold cyan] obra={obra} "
+        f"mode={mode} output={output_path}"
+    )
+
+    try:
+        if mode == "adaptive":
+            if not config.get().anthropic_api_key:
+                console.print(
+                    "[red]x ANTHROPIC_API_KEY ausente — "
+                    "use --mode simple ou configure .env[/red]"
+                )
+                sys.exit(3)
+            gt = run_adaptive_interview(inp)
+        else:
+            gt = run_simple_interview(inp)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]- Interrompido (Ctrl+C)[/yellow]")
+        sys.exit(1)
+    except Exception as exc:
+        console.print(
+            f"[red]x Falha ({type(exc).__name__}):[/red] {exc}"
+        )
+        sys.exit(2)
+
+    write_ground_truth_yaml(gt, output_path)
+    console.print(
+        f"\n[green]+[/green] Ground Truth salvo: {output_path}"
+    )
+    console.print(
+        f"  obra_real: {gt.obra_real.nome}\n"
+        f"  canal: {gt.canal.id} ({gt.canal.tipo})\n"
+        f"  contratos: {len(gt.contratos)}\n"
+        f"  pagamentos: {len(gt.pagamentos_confirmados)} conf / "
+        f"{len(gt.pagamentos_pendentes)} pendentes"
+    )
+
+
 @main.command(name="correlate")
 @click.option("--obra", required=True, help="Identificador da obra")
 @click.option(
