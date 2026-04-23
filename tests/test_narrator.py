@@ -316,6 +316,42 @@ def test_narrate_with_gt_switches_to_v3_prompt(db_with_key, monkeypatch):
     assert "Ground Truth" in call["system"]
 
 
+def test_narrate_adversarial_flag_switches_to_v4(db_with_key, monkeypatch):
+    """Flag adversarial=True usa V4_ADVERSARIAL."""
+    from rdo_agent.forensic_agent.narrator import PROMPT_VERSION_ADVERSARIAL
+    from rdo_agent.forensic_agent.prompts import (
+        NARRATOR_SYSTEM_PROMPT_V4_ADVERSARIAL,
+    )
+    client = _install_fake(
+        monkeypatch, [_FakeMessage(_valid_markdown())],
+    )
+    d = _sample_dossier()
+    d["adversarial"] = True
+    result = narrate(d, db_with_key)
+    assert result.prompt_version == PROMPT_VERSION_ADVERSARIAL
+    assert result.prompt_version == "narrator_v4_adversarial"
+    call = client.messages.calls[0]
+    assert call["system"] == NARRATOR_SYSTEM_PROMPT_V4_ADVERSARIAL
+    assert "Contestações Hipotéticas" in call["system"]
+
+
+def test_narrate_adversarial_plus_gt_still_uses_v4(db_with_key, monkeypatch):
+    """Com adversarial=True + GT, ainda V4 (que herda V3_GT)."""
+    from rdo_agent.forensic_agent.narrator import PROMPT_VERSION_ADVERSARIAL
+    client = _install_fake(
+        monkeypatch, [_FakeMessage(_valid_markdown())],
+    )
+    d = _sample_dossier()
+    d["adversarial"] = True
+    d["ground_truth"] = {"obra_real": {"nome": "X"}}
+    result = narrate(d, db_with_key)
+    assert result.prompt_version == PROMPT_VERSION_ADVERSARIAL
+    # V4 inclui GT section (herda de V3_GT)
+    call = client.messages.calls[0]
+    assert "Ground Truth" in call["system"]
+    assert "Contestações Hipotéticas" in call["system"]
+
+
 def test_narrate_empty_gt_dict_still_uses_v2(db_with_key, monkeypatch):
     """ground_truth: {} (vazio) nao ativa V3."""
     client = _install_fake(

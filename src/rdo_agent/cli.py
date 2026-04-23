@@ -835,11 +835,21 @@ def review(obra: str) -> None:
         "deixando so alta confianca. 0.0 inclui tudo."
     ),
 )
+@click.option(
+    "--adversarial", is_flag=True, default=False,
+    help=(
+        "Modo adversarial (Fase E): adiciona secao 'Contestacoes "
+        "Hipoteticas' com argumentos que a outra parte do canal poderia "
+        "levantar. Prompt version = narrator_v4_adversarial. Combinavel "
+        "com --context."
+    ),
+)
 def narrate_cmd(
     obra: str, dia: str | None, scope: str | None,
     skip_cache: bool, reports_root: str,
     context_path: Path | None,
     min_correlation_conf: float,
+    adversarial: bool,
 ) -> None:
     """Gera narrativa forense (Sprint 5 Fase A+C) via agente Sonnet 4.6."""
     from rdo_agent.forensic_agent import (
@@ -931,6 +941,9 @@ def narrate_cmd(
                 conn, obra, gt=gt,
                 min_correlation_confidence=min_correlation_conf,
             )
+        # Fase E: injeta flag no dossier (muda hash -> invalida cache)
+        if adversarial:
+            dossier["adversarial"] = True
 
         events_count = dossier["statistics"]["events_total"]
         if events_count == 0:

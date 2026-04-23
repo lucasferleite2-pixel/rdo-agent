@@ -33,6 +33,7 @@ from datetime import UTC, datetime
 from rdo_agent.forensic_agent.prompts import (
     NARRATOR_SYSTEM_PROMPT_V1,
     NARRATOR_SYSTEM_PROMPT_V3_GT,
+    NARRATOR_SYSTEM_PROMPT_V4_ADVERSARIAL,
     NARRATOR_USER_TEMPLATE,
 )
 from rdo_agent.utils import config
@@ -44,15 +45,23 @@ log = get_logger(__name__)
 MODEL: str = "claude-sonnet-4-6"
 PROMPT_VERSION: str = "narrator_v2_1_anchoring"
 PROMPT_VERSION_GT: str = "narrator_v3_1_anchoring"
+PROMPT_VERSION_ADVERSARIAL: str = "narrator_v4_adversarial"
 
 
 def _select_prompt_and_version(dossier: dict) -> tuple[str, str]:
     """
-    Retorna (system_prompt, prompt_version) baseado na presenca de
-    'ground_truth' no dossier. Injection-safe: se GT vazio/nulo, usa V1.
+    Retorna (system_prompt, prompt_version) baseado em flags do dossier:
+      - adversarial=True => V4 (herda V3 GT; funciona com ou sem GT)
+      - ground_truth nao vazio => V3_GT
+      - default => V1 (com ancoragem de correlacoes)
     """
+    if bool(dossier.get("adversarial")):
+        return (
+            NARRATOR_SYSTEM_PROMPT_V4_ADVERSARIAL,
+            PROMPT_VERSION_ADVERSARIAL,
+        )
     gt = dossier.get("ground_truth")
-    if gt:  # dict nao-vazio
+    if gt:
         return NARRATOR_SYSTEM_PROMPT_V3_GT, PROMPT_VERSION_GT
     return NARRATOR_SYSTEM_PROMPT_V1, PROMPT_VERSION
 TEMPERATURE: float = 0.1
@@ -407,6 +416,7 @@ __all__ = [
     "MODEL",
     "PRICING_USD_PER_TOKEN",
     "PROMPT_VERSION",
+    "PROMPT_VERSION_ADVERSARIAL",
     "PROMPT_VERSION_GT",
     "NarrationResult",
     "narrate",
