@@ -1242,5 +1242,131 @@ def correlate_cmd(obra: str, rebuild: bool, sample_n: int) -> None:
         conn.close()
 
 
+@main.command(name="export-laudo")
+@click.option(
+    "--corpus", required=True,
+    help="Nome do canal/corpus (ex: EVERALDO_SANTAQUITERIA)",
+)
+@click.option(
+    "--output", "-o", "output_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Path do PDF de saida.",
+)
+@click.option(
+    "--certified", is_flag=True, default=False,
+    help=(
+        "Inclui selo de certificacao + marca d'agua dourada na ultima "
+        "pagina do laudo."
+    ),
+)
+@click.option(
+    "--adversarial", is_flag=True, default=False,
+    help=(
+        "Prioriza narrativas v4_adversarial (com secao 'Contestacoes "
+        "Hipoteticas') ao selecionar conteudo do laudo."
+    ),
+)
+@click.option(
+    "--context",
+    "context_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Path opcional de ground truth YAML. Quando fornecido, o laudo "
+        "marca include_ground_truth=True (metadata). O GT em si nao eh "
+        "re-injetado no narrator — eh puramente sinalizacao auditavel."
+    ),
+)
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Path opcional de config YAML com overrides "
+        "(cliente, processo, objeto, operador, titulo)."
+    ),
+)
+def export_laudo(
+    corpus: str, output_path: Path,
+    certified: bool, adversarial: bool,
+    context_path: Path | None, config_path: Path | None,
+) -> None:
+    """Exporta laudo forense Vestigio em PDF (Fase D Sessao 3)."""
+    from rdo_agent.laudo import (
+        CorpusNotFoundError,
+        LaudoGenerator,
+        rdo_to_vestigio_data,
+    )
+
+    # Parse config overrides se fornecido
+    overrides: dict = {}
+    if config_path is not None:
+        try:
+            import yaml
+        except ImportError:
+            console.print(
+                "[red]x PyYAML nao instalado — requerido para --config. "
+                "Execute: pip install pyyaml[/red]"
+            )
+            sys.exit(3)
+        try:
+            raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            console.print(f"[red]x YAML invalido:[/red] {exc}")
+            sys.exit(2)
+        if isinstance(raw, dict):
+            # Aceita chaves em top-level OU aninhadas em 'laudo:' / 'metadata:'
+            for src in (raw, raw.get("laudo", {}), raw.get("metadata", {})):
+                if isinstance(src, dict):
+                    for k in ("cliente", "processo", "objeto", "operador",
+                              "titulo"):
+                        if src.get(k):
+                            overrides[k] = src[k]
+
+    include_gt = context_path is not None
+    console.print(
+        f"[bold cyan]Exportando laudo[/bold cyan] corpus={corpus} "
+        f"output={output_path} "
+        f"{'[adversarial]' if adversarial else ''}"
+        f"{'[certified]' if certified else ''}"
+        f"{'[gt]' if include_gt else ''}"
+    )
+    if context_path is not None:
+        console.print(f"  [dim]GT sinalizado: {context_path.name}[/dim]")
+    if overrides:
+        console.print(
+            f"  [dim]Config overrides: {sorted(overrides.keys())}[/dim]"
+        )
+
+    try:
+        data = rdo_to_vestigio_data(
+            corpus,
+            adversarial=adversarial,
+            include_ground_truth=include_gt,
+            config_overrides=overrides,
+        )
+    except CorpusNotFoundError as exc:
+        console.print(f"[red]x {exc}[/red]")
+        sys.exit(2)
+
+    # Propaga flag do selo
+    data.incluir_marca_dagua_certificacao = certified
+
+    gen = LaudoGenerator()
+    result = gen.generate(data, output_path)
+    size_kb = result.stat().st_size / 1024
+    console.print(
+        f"\n[green]+[/green] Laudo gerado: {result} ({size_kb:.1f} KB)"
+    )
+    console.print(
+        f"  caso={data.caso_id} | hash={data.corpus_hash} | "
+        f"msgs={data.total_mensagens} | corr={data.total_correlacoes} | "
+        f"secoes={len(data.secoes_narrativa)} | "
+        f"cronologia={len(data.cronologia)}"
+    )
+
+
 if __name__ == "__main__":
     main()
