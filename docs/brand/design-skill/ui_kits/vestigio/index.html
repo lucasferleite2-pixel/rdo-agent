@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vestígio — App</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<style>
+  html, body { margin:0; padding:0; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="Controls.jsx"></script>
+<script type="text/babel" src="AppShell.jsx"></script>
+<script type="text/babel" src="CaseList.jsx"></script>
+<script type="text/babel" src="Timeline.jsx"></script>
+<script type="text/babel" src="CaseDetail.jsx"></script>
+<script type="text/babel" src="LaudoCover.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+const App = () => {
+  const [view, setView] = useState({screen:'casos', caseData:null});
+
+  const onNav = (id) => {
+    if (id === 'casos') setView({screen:'casos', caseData:null});
+    else if (id === 'laudos') setView({screen:'laudo', caseData: CASES[0]});
+    else if (id === 'corpus') setView({screen:'case', caseData: CASES[0]});
+    else setView({screen: id, caseData:null});
+  };
+
+  return (
+    <AppShell active={view.screen==='case'?'casos':view.screen==='laudo'?'laudos':view.screen} onNav={onNav}>
+      {view.screen === 'casos' && <CaseList onOpen={(c) => setView({screen:'case', caseData:c})}/>}
+      {view.screen === 'case' && <CaseDetail caseData={view.caseData} onBack={()=>setView({screen:'casos',caseData:null})}/>}
+      {view.screen === 'laudo' && <LaudoCover caseData={view.caseData} onBack={()=>setView({screen:'case',caseData:view.caseData})}/>}
+      {view.screen === 'auditoria' && (
+        <div style={{padding:80,textAlign:'center',color:'#9A9A9A'}}>
+          <Eyebrow style={{marginBottom:14}}>Módulo 04 · Auditoria</Eyebrow>
+          <div style={{fontFamily:'var(--vst-serif)',fontSize:28,color:'#4A4A4A'}}>
+            Registro imutável de acessos e operações.
+          </div>
+          <div style={{marginTop:10,fontSize:14}}>Em construção neste protótipo.</div>
+        </div>
+      )}
+    </AppShell>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

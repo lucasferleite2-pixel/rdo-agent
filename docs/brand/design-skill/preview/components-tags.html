@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:24px;background:var(--vst-paper);width:700px;box-sizing:border-box}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--vst-fg-3);font-weight:600;margin-bottom:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.tag{font-family:var(--vst-sans);font-size:11px;letter-spacing:.06em;padding:3px 10px;border-radius:999px;border:1px solid;text-transform:uppercase;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.tag .d{width:6px;height:6px;border-radius:50%}
+.t-ok{color:#2A3E28;border-color:#3D5A3A;background:rgba(61,90,58,.08)}
+.t-ok .d{background:#3D5A3A}
+.t-wn{color:#6B4A12;border-color:#A8751C;background:rgba(168,117,28,.08)}
+.t-wn .d{background:#A8751C}
+.t-al{color:#4A0A12;border-color:#6B0F1A;background:rgba(107,15,26,.08)}
+.t-al .d{background:#6B0F1A}
+.t-mu{color:#4A4A4A;border-color:rgba(26,26,26,.22);background:transparent}
+.t-mu .d{background:#9A9A9A}
+.chip{font-family:var(--vst-mono);font-size:11px;padding:2px 8px;background:#EDE7DC;border:1px solid rgba(26,26,26,.12);border-radius:2px;color:#4A4A4A}
+</style></head><body>
+<div class="lbl">Status tags & chips</div>
+<div class="row">
+  <span class="tag t-ok"><span class="d"></span>Íntegro</span>
+  <span class="tag t-wn"><span class="d"></span>Metadado inferido</span>
+  <span class="tag t-al"><span class="d"></span>Cadeia rompida</span>
+  <span class="tag t-mu"><span class="d"></span>Em processamento</span>
+</div>
+<div class="row">
+  <span class="chip">WhatsApp</span>
+  <span class="chip">E-mail · .eml</span>
+  <span class="chip">Áudio · .ogg</span>
+  <span class="chip">PDF assinado</span>
+  <span class="chip">sha256 · 8f3a91…</span>
+</div>
+</body></html>

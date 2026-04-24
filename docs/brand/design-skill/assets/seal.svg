@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Selo Vestígio — Laudo Pericial">
+  <defs>
+    <path id="vst-seal-top" d="M 100,100 m -72,0 a 72,72 0 0,1 144,0" fill="none"></path>
+    <path id="vst-seal-bot" d="M 100,100 m -72,0 a 72,72 0 0,0 144,0" fill="none"></path>
+  </defs>
+  <g fill="none" stroke="#8B6F47" stroke-width="1">
+    <circle cx="100" cy="100" r="88"></circle>
+    <circle cx="100" cy="100" r="82"></circle>
+    <circle cx="100" cy="100" r="62"></circle>
+    <circle cx="100" cy="100" r="58"></circle>
+  </g>
+
+  
+  <g stroke="#8B6F47" stroke-width="1">
+    <line x1="100" y1="12" x2="100" y2="20"></line>
+    <line x1="100" y1="180" x2="100" y2="188"></line>
+    <line x1="12" y1="100" x2="20" y2="100"></line>
+    <line x1="180" y1="100" x2="188" y2="100"></line>
+  </g>
+
+  
+  <text x="100" y="118" text-anchor="middle" font-family="EB Garamond, Georgia, serif" font-weight="500" font-style="italic" font-size="62" fill="#8B6F47">V</text>
+  <line x1="76" y1="128" x2="124" y2="128" stroke="#8B6F47" stroke-width="0.6"></line>
+  <text x="100" y="140" text-anchor="middle" font-family="Inter, sans-serif" font-size="6" letter-spacing="1.4" fill="#8B6F47" font-weight="600">MMXXV</text>
+
+  
+  <text font-family="Inter, sans-serif" font-size="9" letter-spacing="3" fill="#8B6F47" font-weight="600">
+    <textPath href="#vst-seal-top" startOffset="50%" text-anchor="middle">VESTÍGIO · PERÍCIA DIGITAL</textPath>
+  </text>
+  <text font-family="Inter, sans-serif" font-size="9" letter-spacing="3" fill="#8B6F47" font-weight="600">
+    <textPath href="#vst-seal-bot" startOffset="50%" text-anchor="middle">LAUDO AUDITÁVEL · CADEIA DE CUSTÓDIA</textPath>
+  </text>
+</svg>

@@ -1,0 +1,30 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:24px;background:var(--vst-paper);width:700px;box-sizing:border-box}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--vst-fg-3);font-weight:600;margin-bottom:16px}
+.row{display:flex;gap:12px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
+.btn{font-family:var(--vst-sans);font-size:14px;font-weight:500;padding:10px 18px;border:1px solid transparent;border-radius:3px;cursor:pointer;letter-spacing:.01em;transition:background 120ms}
+.btn-p{background:#6B0F1A;color:#F5F1EA}
+.btn-p:hover{background:#4A0A12}
+.btn-s{background:transparent;color:#1A1A1A;border-color:#1A1A1A}
+.btn-s:hover{background:#1A1A1A;color:#F5F1EA}
+.btn-g{background:transparent;color:#4A4A4A;border-color:rgba(26,26,26,.22)}
+.btn-g:hover{color:#6B0F1A;border-color:#6B0F1A}
+.btn-link{background:none;border:0;color:#4A4A4A;text-decoration:underline;text-underline-offset:2px;padding:0;font-size:14px;cursor:pointer}
+.btn-link:hover{color:#6B0F1A}
+.btn-sm{font-size:12px;padding:6px 12px}
+.note{font-family:var(--vst-mono);font-size:10px;color:var(--vst-fg-3);margin-top:4px}
+</style></head><body>
+<div class="lbl">Botões</div>
+<div class="row">
+  <button class="btn btn-p">Gerar laudo</button>
+  <button class="btn btn-s">Importar corpus</button>
+  <button class="btn btn-g">Cancelar</button>
+  <button class="btn-link">Ver exemplo</button>
+</div>
+<div class="row">
+  <button class="btn btn-p btn-sm">Exportar PDF</button>
+  <button class="btn btn-s btn-sm">Filtrar</button>
+  <button class="btn btn-g btn-sm">Descartar</button>
+</div>
+<div class="note">primário (bordô) · secundário (ink outline) · terciário (graphite) · link</div>
+</body></html>

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vestígio — App (print)</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<meta name="ext-resource-dependency" content="../../assets/seal.svg" data-resource-id="seal" />
+<template id="__bundler_thumbnail" data-bg-color="#F5F1EA">
+  <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <rect width="200" height="200" fill="#F5F1EA"/>
+    <rect x="24" y="24" width="152" height="152" fill="none" stroke="#1A1A1A" stroke-width="1"/>
+    <text x="100" y="128" text-anchor="middle" font-family="Georgia, serif" font-style="italic" font-size="110" fill="#1A1A1A">V</text>
+    <circle cx="100" cy="148" r="3" fill="#6B0F1A"/>
+  </svg>
+</template>
+<style>
+  html, body { margin:0; padding:0; background:#F5F1EA; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 100%; max-width: 1280px; margin: 0 auto; padding: 32px; box-sizing: border-box; background:#F5F1EA; }
+  .page + .page { break-before: page; }
+  .section { break-inside: avoid; }
+
+  @page { size: A4 landscape; margin: 0.5cm; }
+
+  @media print {
+    body { background:#F5F1EA; }
+    .page { padding: 24px; max-width: none; }
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+<script src="../../vendor/react.min.js"></script>
+<script src="../../vendor/react-dom.min.js"></script>
+<script src="../../vendor/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="Controls.jsx"></script>
+<script type="text/babel" src="AppShell.jsx"></script>
+<script type="text/babel" src="CaseList.jsx"></script>
+<script type="text/babel" src="Timeline.jsx"></script>
+<script type="text/babel" src="CaseDetail.jsx"></script>
+<script type="text/babel" src="LaudoCover.jsx"></script>
+
+<script type="text/babel">
+const PrintDoc = () => (
+  <>
+    <div className="page section">
+      <AppShell active="casos" onNav={()=>{}}>
+        <CaseList onOpen={()=>{}}/>
+      </AppShell>
+    </div>
+    <div className="page section">
+      <AppShell active="casos" onNav={()=>{}}>
+        <CaseDetail caseData={CASES[0]} onBack={()=>{}}/>
+      </AppShell>
+    </div>
+    <div className="page section">
+      <AppShell active="laudos" onNav={()=>{}}>
+        <LaudoCover caseData={CASES[0]} onBack={()=>{}}/>
+      </AppShell>
+    </div>
+  </>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<PrintDoc/>);
+</script>
+</body>
+</html>

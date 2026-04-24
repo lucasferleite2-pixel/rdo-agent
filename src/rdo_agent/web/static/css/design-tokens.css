@@ -1,0 +1,310 @@
+/* ============================================================
+   VESTÍGIO — Colors & Type
+   Institutional forensic. High information density. No blue.
+   ============================================================ */
+
+/* ---- Fonts ----
+   All three families self-hosted from fonts/ (user-provided TTF).
+*/
+
+/* Inter — variable (opsz + wght) */
+@font-face {
+  font-family: 'Inter';
+  src: url('fonts/Inter-VariableFont_opsz,wght.ttf') format('truetype-variations'),
+       url('fonts/Inter-VariableFont_opsz,wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('fonts/Inter-Italic-VariableFont_opsz,wght.ttf') format('truetype-variations'),
+       url('fonts/Inter-Italic-VariableFont_opsz,wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* EB Garamond — variable, both axes in one file each */
+@font-face {
+  font-family: 'EB Garamond';
+  src: url('fonts/EBGaramond-VariableFont_wght.ttf') format('truetype-variations'),
+       url('fonts/EBGaramond-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'EB Garamond';
+  src: url('fonts/EBGaramond-Italic-VariableFont_wght.ttf') format('truetype-variations'),
+       url('fonts/EBGaramond-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* JetBrains Mono — variable */
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype-variations'),
+       url('fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('fonts/JetBrainsMono-Italic-VariableFont_wght.ttf') format('truetype-variations'),
+       url('fonts/JetBrainsMono-Italic-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  /* ---------- Core palette ---------- */
+  --vst-bordo:        #6B0F1A;  /* Bordô profundo — primary institutional */
+  --vst-bordo-deep:   #4A0A12;  /* Hover / pressed */
+  --vst-bordo-tint:   #8A1A25;  /* Inline accent / selection */
+  --vst-ink:          #1A1A1A;  /* Preto institucional */
+  --vst-graphite:     #4A4A4A;  /* Grafite médio — secondary text, links */
+  --vst-graphite-2:   #6E6E6E;  /* Tertiary text, dividers strong */
+  --vst-graphite-3:   #9A9A9A;  /* Meta, captions */
+  --vst-paper:        #F5F1EA;  /* Off-white quente — canvas */
+  --vst-paper-2:      #EDE7DC;  /* Paper recessed */
+  --vst-paper-3:      #E3DCCE;  /* Paper border */
+  --vst-paper-hi:     #FBF8F2;  /* Paper elevated */
+  --vst-gold:         #8B6F47;  /* Dourado envelhecido — seals, watermarks ONLY */
+  --vst-gold-ink:     #6B5636;
+
+  /* Evidence / forensic neutrals (for mono blocks, redaction) */
+  --vst-evidence-bg:  #14110D;
+  --vst-evidence-fg:  #E8E1D0;
+
+  /* ---------- Semantic foreground ---------- */
+  --vst-fg-1: var(--vst-ink);        /* Primary text */
+  --vst-fg-2: var(--vst-graphite);   /* Secondary */
+  --vst-fg-3: var(--vst-graphite-2); /* Tertiary */
+  --vst-fg-4: var(--vst-graphite-3); /* Meta */
+  --vst-fg-inv: var(--vst-paper);    /* Text on dark */
+  --vst-fg-accent: var(--vst-bordo); /* Accent text (sparing) */
+
+  /* ---------- Semantic background ---------- */
+  --vst-bg:         var(--vst-paper);
+  --vst-bg-raised: var(--vst-paper-hi);
+  --vst-bg-recess: var(--vst-paper-2);
+  --vst-bg-ink:    var(--vst-ink);
+
+  /* ---------- Borders / rules ---------- */
+  --vst-rule-hair:   rgba(26, 26, 26, 0.12);
+  --vst-rule:        rgba(26, 26, 26, 0.22);
+  --vst-rule-strong: rgba(26, 26, 26, 0.55);
+  --vst-rule-ink:    var(--vst-ink);
+
+  /* ---------- Status (earthy, no blue, no festive greens) ---------- */
+  --vst-status-ok:     #3D5A3A;  /* Oliva escura — confirmado */
+  --vst-status-warn:   #A8751C;  /* Âmbar envelhecido — atenção */
+  --vst-status-alert:  var(--vst-bordo);
+  --vst-status-muted:  var(--vst-graphite-2);
+
+  /* ---------- Type families ---------- */
+  --vst-serif: 'EB Garamond', 'Apple Garamond', Georgia, 'Times New Roman', serif;
+  --vst-sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --vst-mono:  'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* ---------- Type scale (editorial) ---------- */
+  --vst-size-display:  68px;  /* Cover / H0 */
+  --vst-size-h1:       44px;
+  --vst-size-h2:       32px;
+  --vst-size-h3:       24px;
+  --vst-size-h4:       19px;
+  --vst-size-lead:     19px;  /* Intro paragraph */
+  --vst-size-body:     16px;  /* Default UI body (min 15–16) */
+  --vst-size-body-sm:  15px;
+  --vst-size-caption:  13px;
+  --vst-size-micro:    11px;  /* Eyebrow, legal, uppercase label */
+
+  --vst-lh-display: 1.05;
+  --vst-lh-heading: 1.15;
+  --vst-lh-body:    1.65;
+  --vst-lh-dense:   1.45;
+
+  --vst-track-eyebrow: 0.14em;
+  --vst-track-label:   0.08em;
+  --vst-track-display: -0.01em;
+
+  /* ---------- Spacing (8pt grid, editorial rhythm) ---------- */
+  --vst-s-0:  2px;
+  --vst-s-1:  4px;
+  --vst-s-2:  8px;
+  --vst-s-3:  12px;
+  --vst-s-4:  16px;
+  --vst-s-5:  24px;
+  --vst-s-6:  32px;
+  --vst-s-7:  48px;
+  --vst-s-8:  64px;
+  --vst-s-9:  96px;
+  --vst-s-10: 128px;
+
+  /* ---------- Radii (near-zero; this is a document tool) ---------- */
+  --vst-r-0: 0;
+  --vst-r-1: 2px;
+  --vst-r-2: 3px;      /* Max for most UI */
+  --vst-r-3: 4px;      /* Reserve for rare use (avatars, chips) */
+  --vst-r-pill: 999px; /* Only tags/pills */
+
+  /* ---------- Elevation — restrained; paper not UI ---------- */
+  --vst-shadow-0: none;
+  --vst-shadow-1: 0 1px 0 var(--vst-rule-hair);
+  --vst-shadow-2: 0 1px 2px rgba(26,26,26,0.06), 0 0 0 1px var(--vst-rule-hair);
+  --vst-shadow-3: 0 2px 6px rgba(26,26,26,0.08), 0 0 0 1px var(--vst-rule-hair);
+  --vst-shadow-modal: 0 20px 48px rgba(26,26,26,0.18), 0 0 0 1px var(--vst-rule);
+
+  /* ---------- Motion (restrained) ---------- */
+  --vst-ease:      cubic-bezier(.2, .0, .2, 1);
+  --vst-dur-fast:  120ms;
+  --vst-dur-base:  180ms;
+  --vst-dur-slow:  280ms;
+
+  /* ---------- Container widths ---------- */
+  --vst-measure-prose: 68ch;   /* Body column */
+  --vst-measure-wide:  1180px; /* App max */
+  --vst-measure-doc:   820px;  /* Document view */
+}
+
+/* ============================================================
+   Semantic element defaults
+   ============================================================ */
+
+html, body {
+  background: var(--vst-bg);
+  color: var(--vst-fg-1);
+  font-family: var(--vst-sans);
+  font-size: var(--vst-size-body);
+  line-height: var(--vst-lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Headings — serif, obligatory */
+.vst-display,
+.vst-h1, .vst-h2, .vst-h3, .vst-h4,
+h1, h2, h3, h4 {
+  font-family: var(--vst-serif);
+  color: var(--vst-fg-1);
+  font-weight: 500;
+  letter-spacing: var(--vst-track-display);
+}
+
+.vst-display { font-size: var(--vst-size-display); line-height: var(--vst-lh-display); font-weight: 500; }
+h1, .vst-h1  { font-size: var(--vst-size-h1);      line-height: var(--vst-lh-heading); }
+h2, .vst-h2  { font-size: var(--vst-size-h2);      line-height: var(--vst-lh-heading); }
+h3, .vst-h3  { font-size: var(--vst-size-h3);      line-height: var(--vst-lh-heading); font-weight: 600; }
+h4, .vst-h4  { font-size: var(--vst-size-h4);      line-height: var(--vst-lh-dense); font-weight: 600; }
+
+/* Body */
+p, .vst-body {
+  font-family: var(--vst-sans);
+  font-size: var(--vst-size-body);
+  line-height: var(--vst-lh-body);
+  color: var(--vst-fg-1);
+  max-width: var(--vst-measure-prose);
+}
+.vst-lead {
+  font-family: var(--vst-serif);
+  font-size: var(--vst-size-lead);
+  line-height: 1.5;
+  color: var(--vst-fg-2);
+  font-style: italic;
+}
+
+/* Eyebrow / label */
+.vst-eyebrow {
+  font-family: var(--vst-sans);
+  font-size: var(--vst-size-micro);
+  letter-spacing: var(--vst-track-eyebrow);
+  text-transform: uppercase;
+  color: var(--vst-fg-3);
+  font-weight: 600;
+}
+
+/* Code / evidence — monospace */
+code, pre, kbd, samp, .vst-mono {
+  font-family: var(--vst-mono);
+  font-size: 0.92em;
+}
+pre, .vst-evidence {
+  background: var(--vst-evidence-bg);
+  color: var(--vst-evidence-fg);
+  padding: var(--vst-s-5);
+  border-left: 2px solid var(--vst-bordo);
+  overflow-x: auto;
+  font-size: var(--vst-size-body-sm);
+  line-height: 1.55;
+}
+code:not(pre code) {
+  background: var(--vst-paper-2);
+  padding: 0.08em 0.35em;
+  border: 1px solid var(--vst-rule-hair);
+  border-radius: var(--vst-r-1);
+}
+
+/* Links — graphite with underline. NEVER blue. */
+a, .vst-link {
+  color: var(--vst-graphite);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--vst-rule-strong);
+  transition: color var(--vst-dur-fast) var(--vst-ease),
+              text-decoration-color var(--vst-dur-fast) var(--vst-ease);
+}
+a:hover, .vst-link:hover {
+  color: var(--vst-bordo);
+  text-decoration-color: var(--vst-bordo);
+}
+a:active { color: var(--vst-bordo-deep); }
+
+/* Selection — bordô wash */
+::selection {
+  background: rgba(107, 15, 26, 0.18);
+  color: var(--vst-ink);
+}
+
+/* HR — hair rule */
+hr {
+  border: 0;
+  border-top: 1px solid var(--vst-rule);
+  margin: var(--vst-s-6) 0;
+}
+
+/* Tables — editorial, not dashboard */
+table.vst-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--vst-size-body-sm);
+  font-variant-numeric: tabular-nums;
+}
+table.vst-table thead th {
+  text-align: left;
+  font-family: var(--vst-sans);
+  font-size: var(--vst-size-micro);
+  letter-spacing: var(--vst-track-eyebrow);
+  text-transform: uppercase;
+  color: var(--vst-fg-3);
+  font-weight: 600;
+  padding: var(--vst-s-3) var(--vst-s-4);
+  border-bottom: 1.5px solid var(--vst-ink);
+}
+table.vst-table tbody td {
+  padding: var(--vst-s-3) var(--vst-s-4);
+  border-bottom: 1px solid var(--vst-rule-hair);
+  vertical-align: top;
+}
+table.vst-table tbody tr:hover td { background: var(--vst-paper-2); }
+
+/* Focus — forensic, not playful */
+:focus-visible {
+  outline: 2px solid var(--vst-bordo);
+  outline-offset: 2px;
+}

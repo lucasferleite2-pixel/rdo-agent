@@ -1,0 +1,19 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:24px;background:var(--vst-paper);width:700px;box-sizing:border-box}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--vst-fg-3);font-weight:600;margin-bottom:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.field label{display:block;font-family:var(--vst-sans);font-size:12px;font-weight:600;color:var(--vst-fg-2);letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+.field input,.field select{width:100%;font-family:var(--vst-sans);font-size:15px;padding:9px 12px;background:var(--vst-paper-hi);border:1px solid var(--vst-rule);border-radius:2px;color:var(--vst-ink);box-sizing:border-box}
+.field input:focus{outline:2px solid var(--vst-bordo);outline-offset:1px;border-color:var(--vst-bordo)}
+.help{font-family:var(--vst-sans);font-size:12px;color:var(--vst-fg-3);margin-top:4px;font-style:italic}
+.err input{border-color:var(--vst-bordo);background:#faf2f2}
+.err .help{color:var(--vst-bordo);font-style:normal}
+</style></head><body>
+<div class="lbl">Campos de formulário</div>
+<div class="grid">
+  <div class="field"><label>Nº do laudo</label><input value="2025-0318" /><div class="help">Identificador interno, auto-gerado.</div></div>
+  <div class="field"><label>Fonte</label><select><option>WhatsApp — export .zip</option></select></div>
+  <div class="field err"><label>Hash SHA-256</label><input value="8f3a91…" /><div class="help">Hash divergente da fonte original.</div></div>
+  <div class="field"><label>Data de referência</label><input value="2025-03-14" /><div class="help">Formato ISO 8601.</div></div>
+</div>
+</body></html>

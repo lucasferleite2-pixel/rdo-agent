@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 96" role="img" aria-label="Vestígio">
+  <defs>
+    
+  </defs>
+  <text x="0" y="62" class="vst-wm">Vest<tspan class="vst-wm-accent">í</tspan>gio</text>
+  <line x1="332" y1="38" x2="360" y2="38" class="vst-rule"></line>
+  <text x="368" y="35" class="vst-wm-sub">Perícia</text>
+  <text x="368" y="58" class="vst-wm-sub">Digital</text>
+</svg>

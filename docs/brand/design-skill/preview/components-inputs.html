@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:24px;background:var(--vst-paper);width:700px;box-sizing:border-box}
+.lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--vst-fg-3);font-weight:600;margin-bottom:16px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--vst-fg-3);font-weight:600;margin-bottom:6px}
+.field input,.field textarea,.field select{width:100%;font-family:var(--vst-sans);font-size:15px;padding:9px 12px;background:#FBF8F2;border:1px solid rgba(26,26,26,.22);border-radius:2px;box-sizing:border-box;color:#1A1A1A}
+.field input:focus,.field select:focus{outline:2px solid #6B0F1A;outline-offset:1px;border-color:#1A1A1A}
+.field .hint{font-size:12px;color:var(--vst-fg-3);margin-top:4px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+</style></head><body>
+<div class="lbl">Campos de formulário</div>
+<div class="row">
+<div class="field"><label>Referência do caso</label><input value="2025-0318 / STF" /></div>
+<div class="field"><label>Perito responsável</label><input placeholder="Nome · OAB" /></div>
+</div>
+<div class="field"><label>Descrição do corpus</label><textarea rows="2" style="resize:vertical">Trocas entre partes A e B — período de 62 dias, 14.832 mensagens.</textarea><div class="hint">Campo livre. Incluído no cabeçalho do laudo.</div></div>
+</body></html>
