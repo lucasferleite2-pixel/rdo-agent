@@ -55,3 +55,7 @@ reports/narratives/*.bak-pre-*/
 # RDOs históricos (produtos gerados — reorganizar em Sessão 3)
 reports/rdo_piloto_*
 reports/old_pre-*
+
+# Vestígio assets — PDFs/DOCX/PPTX podem ser pesados, manter apenas o essencial
+# (brandbook e laudo exemplo vão no repo pra referência permanente)
+
