@@ -10,6 +10,8 @@ from rdo_agent.laudo.adapter import (
     CORRELATION_MIN_CONFIDENCE,
     CORRELATIONS_TOP_N,
     CorpusNotFoundError,
+    _markdown_inline,
+    _markdown_to_html,
     rdo_to_vestigio_data,
 )
 from rdo_agent.laudo.vestigio_laudo import (
@@ -463,3 +465,93 @@ def test_adapter_cronologia_sorted_chronologically(db_with_corpus):
 def test_adapter_correlation_min_confidence_constant():
     """Threshold esta alinhado com o resto do projeto (0.70)."""
     assert CORRELATION_MIN_CONFIDENCE == 0.70
+
+
+# ---------------------------------------------------------------------------
+# Conversao markdown -> HTML (Fase 3.8, divida #38)
+# ---------------------------------------------------------------------------
+
+
+def test_markdown_h2_becomes_h3():
+    """`## Titulo` vira <h3> (nao <h2>, reservado para section-mark)."""
+    html = _markdown_to_html("## Analise temporal\n\nConteudo.")
+    assert "<h3>Analise temporal</h3>" in html
+    assert "<h2>" not in html
+    assert "## " not in html
+
+
+def test_markdown_bold_becomes_strong():
+    html = _markdown_to_html("Os eventos **negritados** sao relevantes.")
+    assert "<strong>negritados</strong>" in html
+    assert "**" not in html
+
+
+def test_markdown_italic_becomes_em():
+    html = _markdown_to_html("Texto com *enfase italica* no corpo.")
+    assert "<em>enfase italica</em>" in html
+    # Nao confundir com ** (bold); garantir que nao sobrou * isolado
+    assert "*enfase" not in html and "italica*" not in html
+
+
+def test_markdown_paragraph_separation():
+    """Paragrafos separados por \\n\\n viram <p>...</p>."""
+    md = "Primeiro paragrafo.\n\nSegundo paragrafo.\n\nTerceiro."
+    html = _markdown_to_html(md)
+    assert html.count("<p>") == 3
+    assert html.count("</p>") == 3
+
+
+def test_markdown_empty_string_returns_empty():
+    assert _markdown_to_html("") == ""
+    assert _markdown_to_html(None) == ""  # type: ignore[arg-type]
+    assert _markdown_inline("") == ""
+
+
+def test_markdown_xss_protection():
+    """HTML raw no input deve ser escapado (defense-in-depth)."""
+    html = _markdown_to_html("Antes\n\n<script>alert('xss')</script>\n\nDepois")
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    # Garante que texto benigno sobreviveu
+    assert "Antes" in html and "Depois" in html
+
+
+def test_markdown_inline_strips_single_p_wrapper():
+    """_markdown_inline remove <p> wrapper para conteudo inline unico."""
+    html = _markdown_inline("Texto com **bold**.")
+    assert not html.startswith("<p>")
+    assert not html.endswith("</p>")
+    assert "<strong>bold</strong>" in html
+    assert "Texto com " in html
+
+
+def test_markdown_inline_preserves_multi_block():
+    """Se o input produzir varios blocos, _markdown_inline preserva todos."""
+    html = _markdown_inline("Para 1.\n\nPara 2.")
+    # Com multiplos <p>, nao faz strip
+    assert html.count("<p>") == 2
+
+
+def test_markdown_preserves_lists_and_blockquotes():
+    """Extensao 'extra' + 'sane_lists' cuida de listas e blockquotes."""
+    md = "- item 1\n- item 2\n- item 3"
+    html = _markdown_to_html(md)
+    assert "<ul>" in html and "</ul>" in html
+    assert html.count("<li>") == 3
+
+
+def test_adapter_narratives_have_html_not_markdown(db_with_overview):
+    """Integracao: secoes_narrativa retornam HTML, nunca markdown literal."""
+    conn, corpus = db_with_overview
+    data = rdo_to_vestigio_data(corpus, conn=conn, adversarial=True)
+    # Nenhuma secao pode ter '## ', '**', ou '*palavra*' literais
+    for secao in data.secoes_narrativa:
+        assert "## " not in secao.conteudo, (
+            f"'## ' literal em secao '{secao.titulo}': {secao.conteudo[:200]}"
+        )
+        assert "**" not in secao.conteudo, (
+            f"'**' literal em secao '{secao.titulo}'"
+        )
+    # Resumo executivo tbm convertido (sem ## nem **)
+    assert "## " not in data.resumo_executivo
+    assert "**" not in data.resumo_executivo

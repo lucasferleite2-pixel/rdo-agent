@@ -46,6 +46,9 @@ dependencies = [
 
     # Vestigio Laudo Generator (Sessao 3 — v1.0-vestigio-integrated)
     "jinja2>=3.0",
+
+    # Markdown -> HTML nas narrativas do laudo (Fase 3.8 — dívida #38)
+    "markdown>=3.5",
 ]
 
 [project.optional-dependencies]

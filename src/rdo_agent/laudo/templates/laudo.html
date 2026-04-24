@@ -101,7 +101,7 @@
   {% endif %}
 
   {% if laudo.resumo_executivo %}
-  <p class="lead">{{ laudo.resumo_executivo }}</p>
+  <p class="lead">{{ laudo.resumo_executivo | safe }}</p>
   {% endif %}
 
   <h3>Achados quantitativos</h3>
@@ -120,9 +120,7 @@
     <div class="section-num">{{ "%02d" | format(loop.index + 1) }}</div>
     <h2>{{ secao.titulo }}</h2>
   </div>
-  {% for paragrafo in secao.conteudo.split('\n\n') %}
-  <p>{{ paragrafo }}</p>
-  {% endfor %}
+  <div class="secao-body">{{ secao.conteudo | safe }}</div>
 </div>
 {% endfor %}
 

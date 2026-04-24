@@ -15,12 +15,15 @@ Zero chamadas a API externa. Puro SQL + transformacao de dados.
 from __future__ import annotations
 
 import hashlib
+import html as _html_lib
 import json
 import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+import markdown as _md_lib
 
 from rdo_agent.laudo.vestigio_laudo import (
     Correlacao,
@@ -330,11 +333,14 @@ def _extract_narratives(
             best_per_key[key] = r
 
     # Extrai resumo executivo do overview (primeiro paragrafo apos "Sumario
-    # Executivo" ou os primeiros 400 chars do corpo)
+    # Executivo" ou os primeiros 400 chars do corpo). Convertido pra HTML
+    # inline (sem <p> wrapper) porque o template ja envolve em <p class="lead">.
     overview = best_per_key.get((_SCOPE_OVERVIEW, None))
     resumo_exec = ""
     if overview is not None:
-        resumo_exec = _extract_resumo_from_overview(overview["narrative_text"])
+        resumo_exec = _markdown_inline(
+            _extract_resumo_from_overview(overview["narrative_text"]),
+        )
 
     # Ordena day narratives por scope_ref (data)
     day_rows = sorted(
@@ -343,12 +349,13 @@ def _extract_narratives(
     )
 
     secoes: list[SecaoNarrativa] = []
-    # Overview vira 1 secao (se houver) — no inicio
+    # Overview vira 1 secao (se houver) — no inicio. Conteudo convertido de
+    # markdown pra HTML (template usa | safe).
     if overview is not None:
         body = _strip_narrative_boilerplate(overview["narrative_text"])
         secoes.append(SecaoNarrativa(
             titulo="Visão geral do canal",
-            conteudo=body,
+            conteudo=_markdown_to_html(body),
         ))
 
     # Cada dia vira uma secao
@@ -358,7 +365,7 @@ def _extract_narratives(
         body = _strip_narrative_boilerplate(r["narrative_text"])
         secoes.append(SecaoNarrativa(
             titulo=f"Dia {br_date}",
-            conteudo=body,
+            conteudo=_markdown_to_html(body),
         ))
 
     return secoes, resumo_exec
@@ -438,6 +445,66 @@ def _strip_narrative_boilerplate(text: str) -> str:
     # Remove separador trailing '---'
     text = re.sub(r"\n---\s*$", "", text.rstrip())
     return text.strip()
+
+
+# =============================================================================
+# Markdown -> HTML (Fase 3.8, dívida #38)
+# =============================================================================
+
+# Instancia reutilizavel (reset a cada chamada via .reset()).
+_MD = _md_lib.Markdown(extensions=["extra", "sane_lists"])
+
+# Headings vao rebaixados um nivel: h1/h2 sao reservados para capa e
+# section-mark do template Vestigio. Ordem reversa pra evitar cascata
+# (h2 -> h3 -> h4 se rodar em sequencia errada).
+_HEADING_DOWNSHIFT = [
+    ("<h5", "<h6"), ("</h5>", "</h6>"),
+    ("<h4", "<h5"), ("</h4>", "</h5>"),
+    ("<h3", "<h4"), ("</h3>", "</h4>"),
+    ("<h2", "<h3"), ("</h2>", "</h3>"),
+    ("<h1", "<h3"), ("</h1>", "</h3>"),
+]
+
+
+def _markdown_to_html(text: str) -> str:
+    """Converte markdown em HTML preservando estrutura editorial.
+
+    Trata ## Titulos -> <h3>, **bold** -> <strong>, *italic* -> <em>,
+    listas, blockquotes, code inline e paragrafos separados por \\n\\n.
+
+    Input e' pre-escapado com html.escape(quote=False) como defense-in-depth
+    contra HTML raw/XSS, mesmo sabendo que narrativas sao geradas
+    internamente pelo pipeline (nunca input de usuario).
+    """
+    if not text:
+        return ""
+    escaped = _html_lib.escape(text.strip(), quote=False)
+    html = _MD.reset().convert(escaped)
+    for src, dst in _HEADING_DOWNSHIFT:
+        html = html.replace(src, dst)
+    return html
+
+
+def _markdown_inline(text: str) -> str:
+    """Converte markdown para HTML inline, removendo wrapper <p> unico.
+
+    Usado no resumo_executivo, que e' envolvido por <p class="lead"> no
+    template. Evita HTML invalido <p><p>...</p></p>.
+
+    Se o input produzir multiplos blocos, preserva o HTML completo — o
+    template lida com isso via escape visual (nao ha quebra de layout).
+    """
+    if not text:
+        return ""
+    html = _markdown_to_html(text)
+    if (
+        html.startswith("<p>")
+        and html.endswith("</p>")
+        and html.count("<p>") == 1
+        and html.count("</p>") == 1
+    ):
+        return html[3:-4]
+    return html
 
 
 # =============================================================================
