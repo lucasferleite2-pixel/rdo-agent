@@ -8,18 +8,24 @@ Uso típico:
     gen = LaudoGenerator()
     gen.generate(data, "laudo.pdf")
 """
-from .vestigio_laudo import (
-    LaudoGenerator,
-    LaudoData,
-    SecaoNarrativa,
-    EventoCronologia,
+from rdo_agent.laudo.adapter import (
+    CorpusNotFoundError,
+    rdo_to_vestigio_data,
+)
+from rdo_agent.laudo.vestigio_laudo import (
     Correlacao,
+    EventoCronologia,
+    LaudoData,
+    LaudoGenerator,
+    SecaoNarrativa,
 )
 
 __all__ = [
-    "LaudoGenerator",
-    "LaudoData",
-    "SecaoNarrativa",
-    "EventoCronologia",
     "Correlacao",
+    "CorpusNotFoundError",
+    "EventoCronologia",
+    "LaudoData",
+    "LaudoGenerator",
+    "SecaoNarrativa",
+    "rdo_to_vestigio_data",
 ]
