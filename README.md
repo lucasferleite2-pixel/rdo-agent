@@ -75,6 +75,46 @@ rdo-agent generate-rdo --obra CODESC_75817 --data 2026-03-12
 
 ---
 
+## Exportar laudo forense (Vestígio · v1.0)
+
+```bash
+rdo-agent export-laudo --corpus NOME_DO_CANAL --output laudo.pdf
+```
+
+Opções:
+
+- `--adversarial` — inclui contestações hipotéticas (narrator V4).
+  Gera seção "Como a outra parte rebateria…" para preparar defesa.
+- `--certified` — adiciona selo de certificação + marca d'água dourada.
+- `--context FILE.yml` — injeta Ground Truth (metadata auditável).
+- `--config FILE.yml` — overrides de cliente, processo, objeto, operador.
+
+Exemplo completo:
+
+```bash
+rdo-agent export-laudo \
+  --corpus EVERALDO_SANTAQUITERIA \
+  --output ~/laudos/everaldo-2026-04.pdf \
+  --adversarial \
+  --context docs/ground_truth/EVERALDO_SANTAQUITERIA.yml
+```
+
+Amostra de referência: `docs/brand/Laudo-Real-EVERALDO-v1.0.pdf`
+(50 páginas, gerada 100% a partir de dados reais do corpus piloto).
+
+### Dependências de sistema (WeasyPrint)
+
+No Ubuntu/Debian mínimo, WeasyPrint pode exigir:
+
+```bash
+sudo apt install -y libpango-1.0-0 libpangoft2-1.0-0 \
+                    libcairo2 libgdk-pixbuf-2.0-0
+```
+
+(Em WSL2 Ubuntu 24.04 já vem por padrão.)
+
+---
+
 ## Estrutura do código
 
 ```

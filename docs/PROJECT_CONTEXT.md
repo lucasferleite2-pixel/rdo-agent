@@ -2,7 +2,7 @@
 
 > **Propósito deste documento:** servir como briefing completo pra qualquer nova conversa de IA (Claude, GPT, etc) assumir o projeto sem perda de contexto. Leia de ponta a ponta antes de tomar qualquer decisão técnica ou arquitetural.
 >
-> **Última atualização:** 23/04/2026 — versão rdo-agent v0.8.0-forensic-complete
+> **Última atualização:** 23/04/2026 — versão rdo-agent v1.0-vestigio-integrated
 
 ---
 
@@ -161,7 +161,13 @@ INPUT: export WhatsApp (.txt + mídia) → pasta da vault
 │   │       ├── semantic.py
 │   │       └── math.py
 │   ├── ground_truth/                   # Fase C (loader YAML, schema)
-│   └── gt_extractor/                   # Fase D (entrevista simple + adaptive)
+│   ├── gt_extractor/                   # Fase D (entrevista simple + adaptive)
+│   └── laudo/                          # Sessão 3 — Laudo Generator Vestígio
+│       ├── vestigio_laudo.py           #   LaudoGenerator + dataclasses
+│       ├── adapter.py                  #   rdo-agent state → LaudoData
+│       ├── templates/laudo.html
+│       ├── static/laudo.css
+│       └── fonts/ (EB Garamond, Inter, JetBrains Mono)
 │
 ├── docs/
 │   ├── PROJECT_CONTEXT.md              # ← ESTE ARQUIVO
@@ -294,6 +300,23 @@ Base arquitetural: setup repo, estrutura Python, ambiente WSL, integração SDKs
 - 2 narrativas regeneradas com GT real (passed=YES)
 - 480 → 515 testes; sessão ~35min; custo $0.38
 
+### 5.12 Sessão 3 — Integração Laudo Generator Vestígio (23/04 noite) — `v1.0-vestigio-integrated`
+
+- Adapter `src/rdo_agent/laudo/adapter.py` converte estado rdo-agent
+  → `LaudoData` (dataclass do Vestígio)
+- CLI `rdo-agent export-laudo --corpus X --output Y.pdf`
+  * `--adversarial`: prioriza narrativas v4_adversarial
+  * `--certified`: selo dourado + marca d'água
+  * `--context`: marca GT como metadata auditável
+  * `--config`: overrides de cliente/processo/objeto/operador
+- Dependências bumpadas: `weasyprint>=68.0`, `jinja2>=3.0`
+- Laudo real EVERALDO gerado: 50 páginas, 224KB, dados 100% reais
+  (zero Lorem Ipsum, zero dados fictícios do exemplo)
+- Validação: 12 critérios positivos + 6 negativos — todos OK
+- 588 → 611 testes passando (+23 novos)
+- Custo API sessão: **US$ 0.00** (puramente código)
+- Amostra preservada: `docs/brand/Laudo-Real-EVERALDO-v1.0.pdf`
+
 ### 5.11 Sprint 5 Fase D + E (23/04 final de tarde, Sessão 2) — `v0.8.0-forensic-complete`
 
 - 5 dívidas técnicas fechadas: #24, #25, #26, #29, #30
@@ -364,9 +387,10 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 ✅ v0.6.1  — Case validation empírica em corpus real
 ✅ v0.7.0  — Sprint 5 Fase C + 6 dívidas (Sessão 1)
 ✅ v0.8.0  — Sprint 5 Fase D+E + 5 dívidas (Sessão 2)
+✅ v1.0    — Laudo Generator Vestígio integrado (Sessão 3)
 
-### 7.2 CAMINHO ATÉ v1.0 (1 sessão restante)
-🟡 SESSÃO 3 → v1.0-production-ready (estimativa 4-6h autônoma, custo $1-2)
+### 7.2 PÓS v1.0 — Sessão 4 (UI Web)
+🟡 SESSÃO 4 → v1.1-web-ui (estimativa 4-6h autônoma, custo $1-2)
 ├─ UI Web básica (FastAPI + HTML/htmx)
 ├─ Dashboard de narrativas + correlações
 ├─ Export PDF com letterhead HCF/Vale Nobre
@@ -465,7 +489,12 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 - ~~#29~~: Prompt com regra de ancoragem de correlações
 - ~~#30~~: Overview inclui `correlations_sample_weak`
 
-### 9.4 Pendentes (pós-v0.8.0)
+### 9.4 Resolvidas em Sessão 3 (v1.0)
+
+- ~~#35~~: tabela `events` vazia — adapter implementou fallback usando
+  `financial_records` + top classifications
+
+### 9.5 Pendentes (pós-v1.0)
 
 - **#13**: Rename "Pagamentos" → "Discussões financeiras" no RDO (cosmética)
 - **#16**: Streaming no narrator (solução arquitetural vs fix de timeout)
@@ -473,6 +502,10 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 - **#31**: Validator `MAX_BODY_CHARS` — considerar tiers (critical vs informational)
 - **#32**: MAX_TOKENS dinâmico por scope (overview precisa de mais que day)
 - **#33**: Warning file_ids 50% em overview adversarial — diretriz pode conflitar
+- **#34**: WeasyPrint em Linux mínimo exige libpango/libcairo — documentar no README
+- **#36**: Narrativa V4 pode exceder 40k chars e estressar layout PDF — considerar truncamento inteligente por parágrafo
+- **#37**: Extractor de texto do PDF (pdfplumber) quebra section-marks — usar pyMuPDF ou regex tolerante em testes de validação
+- **#38**: Markdown `##` em `## Sumário Executivo` renderiza literal no corpo do laudo — adicionar pass markdown→HTML no adapter (v1.1 cosmetic)
 
 ---
 
@@ -627,6 +660,30 @@ Este arquivo será atualizado a cada versão major:
 - **Issue tracker:** não formal (usa dívidas numeradas neste doc)
 - **Operador:** Lucas Fernandes Leite (Minas Gerais, BR)
 - **Empresas operadoras:** Vale Nobre Construtora e HCF Investimentos
+
+---
+
+## 16. Laudo Generator Vestígio (v1.0-vestigio-integrated)
+
+Módulo terminal do pipeline: converte narrativas + correlações + cronologia
+em PDF forense com identidade visual Vestígio.
+
+- **Package:** `src/rdo_agent/laudo/`
+- **Classes:** `LaudoGenerator`, `LaudoData`, `SecaoNarrativa`,
+  `EventoCronologia`, `Correlacao`
+- **Adapter:** `src/rdo_agent/laudo/adapter.py` — função
+  `rdo_to_vestigio_data(corpus_id, *, adversarial, include_ground_truth,
+  config_overrides) -> LaudoData`
+- **CLI:** `rdo-agent export-laudo --corpus X --output Y.pdf [--adversarial]
+  [--certified] [--context gt.yml] [--config cfg.yml]`
+- **Dependências:** `weasyprint>=68.0`, `jinja2>=3.0`
+- **Fontes embarcadas:** EB Garamond, Inter, JetBrains Mono
+- **Template:** `laudo/templates/laudo.html` (Jinja2 + Paged Media)
+- **Exemplo executável:** `laudo/gen_laudo_example.py` (output default
+  `/tmp/Laudo-Exemplo-Santa-Quiteria.pdf`)
+- **Laudo real EVERALDO:** `docs/brand/Laudo-Real-EVERALDO-v1.0.pdf`
+  (50 páginas, 224 KB, modo adversarial)
+- **Ver também:** `docs/sessions/SESSION_LOG_SESSAO_3_LAUDO.md`
 
 ---
 
