@@ -153,11 +153,13 @@ rdo-agent export-laudo \\
   reconstroi "01 Resumo executivo" como string contigua porque o
   section-mark insere o numero no meio. Validacao automatica de
   conteudo do PDF precisa usar regex mais tolerante ou pyMuPDF.
-- **#38**: no laudo overview adversarial, a narrativa original (que
-  veio com markdown '## Sumário Executivo' como heading) aparece com
-  os marcadores literal '##' renderizados no corpo do laudo. Um
-  pass de markdown-to-HTML no adapter antes de jogar no template
-  resolveria — para v1.1.
+- **#38** (FECHADA na Fase 3.8 corretiva — tag v1.0.1-markdown-fix):
+  no laudo overview adversarial, a narrativa original (que
+  veio com markdown '## Sumário Executivo' como heading) aparecia com
+  os marcadores literal '##' renderizados no corpo do laudo. Corrigida
+  via `_markdown_to_html` / `_markdown_inline` no adapter + template com
+  `| safe`. Validada em docs/brand/Laudo-Real-EVERALDO-v1.0.1.pdf.
+  Ver docs/sessions/SESSION_LOG_SESSAO_3_8_MARKDOWN_FIX.md e ADR-004.
 
 ## Custos
 

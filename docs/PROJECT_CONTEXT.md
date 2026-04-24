@@ -505,7 +505,7 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 - **#34**: WeasyPrint em Linux mínimo exige libpango/libcairo — documentar no README
 - **#36**: Narrativa V4 pode exceder 40k chars e estressar layout PDF — considerar truncamento inteligente por parágrafo
 - **#37**: Extractor de texto do PDF (pdfplumber) quebra section-marks — usar pyMuPDF ou regex tolerante em testes de validação
-- **#38**: Markdown `##` em `## Sumário Executivo` renderiza literal no corpo do laudo — adicionar pass markdown→HTML no adapter (v1.1 cosmetic)
+- **#38**: ~~Markdown `##` em `## Sumário Executivo` renderiza literal no corpo do laudo~~ — **FECHADA na Fase 3.8** (tag v1.0.1-markdown-fix). Adapter converte markdown→HTML via `_markdown_to_html` / `_markdown_inline`; template usa `| safe`. ADR-004.
 
 ---
 
