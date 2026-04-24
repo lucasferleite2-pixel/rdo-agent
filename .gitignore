@@ -62,3 +62,8 @@ reports/old_pre-*
 
 # Extração temporária (não versionar)
 /tmp/vestigio-zip/
+
+# Vestigio Laudo Generator — PDFs gerados pelo exemplo NAO devem
+# poluir o modulo. Output default de gen_laudo_example.py aponta pra
+# /tmp/. Este glob garante que futuras regressoes nao re-entrem.
+src/rdo_agent/laudo/*.pdf

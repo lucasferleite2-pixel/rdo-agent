@@ -257,9 +257,16 @@ dados = LaudoData(
 # =============================================================================
 
 if __name__ == "__main__":
-    out_path = Path(__file__).parent / "Laudo-Exemplo-Santa-Quiteria.pdf"
+    # Default: /tmp para manter src/rdo_agent/laudo/ limpo (somente codigo).
+    # Override via variavel de ambiente LAUDO_OUT se precisar salvar em
+    # outro lugar.
+    import os
+    default_out = Path(os.environ.get(
+        "LAUDO_OUT",
+        "/tmp/Laudo-Exemplo-Santa-Quiteria.pdf",
+    ))
     gen = LaudoGenerator()
-    result = gen.generate(dados, out_path)
+    result = gen.generate(dados, default_out)
 
     size_kb = result.stat().st_size / 1024
     print(f"✓ Laudo gerado: {result}")
