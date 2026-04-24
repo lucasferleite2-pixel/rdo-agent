@@ -38,11 +38,14 @@ dependencies = [
     # Opentimestamps
     "opentimestamps-client>=0.7.0",
 
-    # PDF generation (Sprint 3 §Fase 4)
-    "weasyprint>=60",
+    # PDF generation (Sprint 3 §Fase 4; bumpada em v1.0 pra Vestigio Laudo)
+    "weasyprint>=68.0",
 
     # Ground Truth YAML (Sprint 5 Fase C)
     "pyyaml>=6.0",
+
+    # Vestigio Laudo Generator (Sessao 3 — v1.0-vestigio-integrated)
+    "jinja2>=3.0",
 ]
 
 [project.optional-dependencies]
