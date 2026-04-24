@@ -59,3 +59,6 @@ reports/old_pre-*
 # Vestígio assets — PDFs/DOCX/PPTX podem ser pesados, manter apenas o essencial
 # (brandbook e laudo exemplo vão no repo pra referência permanente)
 
+
+# Extração temporária (não versionar)
+/tmp/vestigio-zip/
