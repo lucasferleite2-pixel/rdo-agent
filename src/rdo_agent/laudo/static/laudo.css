@@ -1,0 +1,652 @@
+/* ============================================================
+   VESTÍGIO · LAUDO FORENSE · CSS BRAND SYSTEM
+   ============================================================ */
+
+:root {
+  --vst-bordo: #6B0F1A;
+  --vst-bordo-forte: #5E0F18;
+  --vst-preto: #1A1A1A;
+  --vst-offwhite: #F5F1EA;
+  --vst-paper: #FAF7F1;
+  --vst-grafite: #4A4A4A;
+  --vst-grafite-fraco: #8A8A8A;
+  --vst-dourado: #8B6F47;
+  --vst-hairline: #D9D2C4;
+  --vst-hairline-fraco: #E8E3D8;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+@page {
+  size: A4;
+  margin: 22mm 20mm 22mm 20mm;
+  background: #F5F1EA;
+  @bottom-left {
+    content: "VESTÍGIO · LAUDO FORENSE";
+    font-family: 'Inter', sans-serif;
+    font-size: 7.5pt;
+    letter-spacing: 0.18em;
+    font-weight: 600;
+    color: #4A4A4A;
+  }
+  @bottom-center {
+    content: "Vestígio Tecnologia Ltda (em abertura)";
+    font-family: 'Inter', sans-serif;
+    font-size: 7.5pt;
+    color: #8A8A8A;
+    font-style: italic;
+  }
+  @bottom-right {
+    content: counter(page) " / " counter(pages);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7.5pt;
+    color: #4A4A4A;
+    font-weight: 500;
+  }
+}
+
+@page cover {
+  margin: 0;
+  @bottom-left { content: none; }
+  @bottom-center { content: none; }
+  @bottom-right { content: none; }
+}
+
+html, body {
+  font-family: 'Inter', sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.7;
+  color: #1A1A1A;
+  background: #F5F1EA;
+  font-feature-settings: 'tnum';
+}
+
+/* ============================================================
+   COVER PAGE
+   ============================================================ */
+
+.cover {
+  page: cover;
+  page-break-after: always;
+  height: 297mm;
+  padding: 25mm 22mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #F5F1EA;
+}
+
+.cover-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 12mm;
+  border-bottom: 2px solid #1A1A1A;
+}
+
+.cover-brand {
+  font-family: 'EB Garamond', serif;
+  font-weight: 500;
+  font-size: 32pt;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  color: #1A1A1A;
+}
+
+.cover-brand .accent {
+  color: #6B0F1A;
+}
+
+.cover-caseref {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9pt;
+  color: #4A4A4A;
+  letter-spacing: 0.08em;
+  padding-top: 8mm;
+}
+
+.cover-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 15mm 0;
+}
+
+.cover-eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;
+  letter-spacing: 0.4em;
+  font-weight: 600;
+  color: #6B0F1A;
+  text-transform: uppercase;
+  margin-bottom: 10mm;
+}
+
+.cover-title {
+  font-family: 'EB Garamond', serif;
+  font-weight: 500;
+  font-size: 42pt;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  color: #1A1A1A;
+  margin-bottom: 10mm;
+  max-width: 160mm;
+}
+
+.cover-period {
+  font-family: 'EB Garamond', serif;
+  font-style: italic;
+  font-size: 15pt;
+  color: #4A4A4A;
+  line-height: 1.4;
+  margin-bottom: 8mm;
+}
+
+.cover-rule {
+  width: 40mm;
+  height: 2px;
+  background: #6B0F1A;
+  margin: 10mm 0;
+}
+
+.cover-objeto {
+  font-family: 'EB Garamond', serif;
+  font-size: 14pt;
+  line-height: 1.55;
+  color: #1A1A1A;
+  max-width: 150mm;
+}
+
+.cover-metadata {
+  padding-top: 12mm;
+  border-top: 2px solid #1A1A1A;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6mm;
+  margin-bottom: 14mm;
+}
+
+.meta-cell {
+  padding: 4mm 5mm;
+  background: #FAF7F1;
+  border-left: 2px solid #6B0F1A;
+}
+
+.meta-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 7.5pt;
+  letter-spacing: 0.2em;
+  font-weight: 600;
+  color: #4A4A4A;
+  text-transform: uppercase;
+  margin-bottom: 2mm;
+}
+
+.meta-value {
+  font-family: 'EB Garamond', serif;
+  font-size: 14pt;
+  color: #1A1A1A;
+  font-weight: 500;
+}
+
+.meta-value.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11pt;
+  font-weight: 500;
+}
+
+.cover-footer {
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 2fr;
+  gap: 8mm;
+}
+
+.cff-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 7pt;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  color: #6B0F1A;
+  text-transform: uppercase;
+  margin-bottom: 2mm;
+}
+
+.cff-value {
+  font-family: 'EB Garamond', serif;
+  font-size: 11pt;
+  color: #1A1A1A;
+}
+
+.cff-value.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9pt;
+}
+
+/* ============================================================
+   CONTENT PAGES
+   ============================================================ */
+
+.page-content {
+  page-break-before: always;
+}
+
+.section-mark {
+  display: flex;
+  align-items: baseline;
+  gap: 6mm;
+  margin-bottom: 8mm;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid #1A1A1A;
+}
+
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14pt;
+  color: #6B0F1A;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+.section-mark h2 {
+  font-family: 'EB Garamond', serif;
+  font-weight: 500;
+  font-size: 28pt;
+  letter-spacing: -0.01em;
+  color: #1A1A1A;
+  line-height: 1.1;
+}
+
+h3 {
+  font-family: 'EB Garamond', serif;
+  font-weight: 500;
+  font-size: 17pt;
+  color: #1A1A1A;
+  margin-top: 8mm;
+  margin-bottom: 3mm;
+  letter-spacing: -0.005em;
+}
+
+h4 {
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  color: #6B0F1A;
+  text-transform: uppercase;
+  margin-top: 6mm;
+  margin-bottom: 3mm;
+}
+
+p {
+  font-family: 'EB Garamond', serif;
+  font-size: 12pt;
+  line-height: 1.65;
+  color: #1A1A1A;
+  margin-bottom: 4mm;
+  text-align: justify;
+  hyphens: auto;
+}
+
+p.lead {
+  font-size: 13pt;
+  line-height: 1.55;
+  color: #1A1A1A;
+  font-style: italic;
+  margin-bottom: 6mm;
+  text-align: left;
+  max-width: 170mm;
+}
+
+p strong {
+  font-weight: 600;
+  color: #1A1A1A;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.9em;
+}
+
+/* ============================================================
+   INFO GRID (case info at top of executive summary)
+   ============================================================ */
+
+.info-grid {
+  background: #FAF7F1;
+  border: 1px solid #D9D2C4;
+  padding: 5mm 6mm;
+  margin-bottom: 8mm;
+  page-break-inside: avoid;
+}
+
+.info-row {
+  display: grid;
+  grid-template-columns: 35mm 1fr;
+  padding: 2mm 0;
+  border-bottom: 1px dotted #D9D2C4;
+}
+
+.info-row:last-child { border-bottom: none; }
+
+.info-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  color: #6B0F1A;
+  text-transform: uppercase;
+  padding-top: 1.5mm;
+}
+
+.info-value {
+  font-family: 'EB Garamond', serif;
+  font-size: 11.5pt;
+  color: #1A1A1A;
+}
+
+.info-value.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10pt;
+}
+
+/* ============================================================
+   TIMELINE
+   ============================================================ */
+
+.timeline {
+  margin-top: 5mm;
+}
+
+.tl-item {
+  display: grid;
+  grid-template-columns: 30mm 1fr;
+  gap: 5mm;
+  padding: 4mm 0;
+  border-bottom: 1px solid #E8E3D8;
+  page-break-inside: avoid;
+}
+
+.tl-date {
+  text-align: right;
+}
+
+.tl-date-day {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10pt;
+  color: #6B0F1A;
+  font-weight: 500;
+}
+
+.tl-date-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5pt;
+  color: #4A4A4A;
+  margin-top: 1mm;
+}
+
+.tl-body {
+  border-left: 2px solid #D9D2C4;
+  padding-left: 5mm;
+}
+
+.tl-item.tl-pagamento .tl-body { border-left-color: #8B6F47; }
+.tl-item.tl-decisao .tl-body { border-left-color: #6B0F1A; }
+.tl-item.tl-documento .tl-body { border-left-color: #4A4A4A; }
+
+.tl-author {
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: #4A4A4A;
+  text-transform: uppercase;
+  margin-bottom: 1.5mm;
+}
+
+.tl-content {
+  font-family: 'EB Garamond', serif;
+  font-size: 11.5pt;
+  line-height: 1.55;
+  color: #1A1A1A;
+}
+
+.tl-tags {
+  margin-top: 2mm;
+  display: flex;
+  gap: 2mm;
+  flex-wrap: wrap;
+}
+
+.tl-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5pt;
+  padding: 0.5mm 2mm;
+  background: #F5F1EA;
+  border: 1px solid #D9D2C4;
+  color: #4A4A4A;
+  letter-spacing: 0.05em;
+}
+
+/* ============================================================
+   CORRELAÇÕES
+   ============================================================ */
+
+.corr-card {
+  background: #FAF7F1;
+  border: 1px solid #D9D2C4;
+  padding: 6mm 7mm;
+  margin-bottom: 5mm;
+  page-break-inside: avoid;
+}
+
+.corr-card.corr-temporal { border-left: 3px solid #6B0F1A; }
+.corr-card.corr-semantic { border-left: 3px solid #4A4A4A; }
+.corr-card.corr-math { border-left: 3px solid #8B6F47; }
+
+.corr-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4mm;
+}
+
+.corr-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8pt;
+  letter-spacing: 0.15em;
+  font-weight: 500;
+  color: #6B0F1A;
+  padding: 1mm 3mm;
+  background: #F5F1EA;
+  border: 1px solid #D9D2C4;
+  text-transform: uppercase;
+}
+
+.corr-conf {
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;
+  color: #4A4A4A;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+.corr-desc {
+  font-family: 'EB Garamond', serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #1A1A1A;
+  margin-bottom: 4mm;
+}
+
+.corr-excerts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;
+}
+
+.corr-excerpt {
+  background: #F5F1EA;
+  border-left: 2px solid #D9D2C4;
+  padding: 3mm 4mm;
+}
+
+.ce-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 7.5pt;
+  color: #6B0F1A;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  margin-bottom: 1.5mm;
+  text-transform: uppercase;
+}
+
+.ce-quote {
+  font-family: 'EB Garamond', serif;
+  font-style: italic;
+  font-size: 10.5pt;
+  line-height: 1.45;
+  color: #1A1A1A;
+}
+
+/* ============================================================
+   FORENSIC METADATA (final page)
+   ============================================================ */
+
+.final-page {
+  /* The closing page */
+}
+
+.forensic-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 5mm;
+}
+
+.forensic-table td {
+  padding: 1.8mm 4mm;
+  border-bottom: 1px solid #D9D2C4;
+  vertical-align: top;
+}
+
+.ft-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 9pt;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  color: #4A4A4A;
+  text-transform: uppercase;
+  width: 60mm;
+}
+
+.ft-value {
+  font-family: 'EB Garamond', serif;
+  font-size: 11pt;
+  color: #1A1A1A;
+}
+
+.ft-value.mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5pt;
+}
+
+.attestation {
+  background: #FAF7F1;
+  border-left: 3px solid #6B0F1A;
+  padding: 6mm 7mm;
+  margin-top: 6mm;
+  page-break-inside: avoid;
+}
+
+.att-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8pt;
+  letter-spacing: 0.2em;
+  font-weight: 500;
+  color: #6B0F1A;
+  text-transform: uppercase;
+  margin-bottom: 3mm;
+}
+
+.attestation p {
+  font-family: 'EB Garamond', serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: #1A1A1A;
+  margin-bottom: 3mm;
+  text-align: justify;
+}
+
+/* ============================================================
+   CERTIFICATION SEAL (optional, inline on final page only)
+   ============================================================ */
+
+.seal {
+  margin: 6mm auto 0;
+  width: 38mm;
+  height: 38mm;
+  transform: rotate(-6deg);
+  page-break-inside: avoid;
+}
+
+.seal-inner {
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid #8B6F47;
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.seal-inner::before {
+  content: "";
+  position: absolute;
+  top: 3mm;
+  left: 3mm;
+  right: 3mm;
+  bottom: 3mm;
+  border: 0.5px solid #8B6F47;
+  border-radius: 50%;
+}
+
+.seal-mark {
+  font-family: 'EB Garamond', serif;
+  font-size: 20pt;
+  font-weight: 500;
+  color: #8B6F47;
+  line-height: 1;
+  position: relative;
+  z-index: 2;
+}
+
+.seal-dot {
+  display: inline-block;
+  width: 2.2mm;
+  height: 2.2mm;
+  background: #8B6F47;
+  margin-left: 1mm;
+  vertical-align: top;
+  margin-top: 0.8mm;
+}
+
+.seal-ring-top, .seal-ring-bottom {
+  position: absolute;
+  font-family: 'Inter', sans-serif;
+  font-size: 5pt;
+  letter-spacing: 0.12em;
+  color: #8B6F47;
+  font-weight: 600;
+  text-transform: uppercase;
+  width: 100%;
+  text-align: center;
+  z-index: 2;
+}
+
+.seal-ring-top { top: 5mm; }
+.seal-ring-bottom { bottom: 5mm; }

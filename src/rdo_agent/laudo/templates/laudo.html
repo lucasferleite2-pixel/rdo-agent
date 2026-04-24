@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Laudo Forense · {{ laudo.caso_id }}</title>
+</head>
+<body>
+
+{# ═══════════════════════════════════════════════════════════════
+   CAPA
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="cover">
+  <div class="cover-top">
+    <div class="cover-brand">
+      <span>Vest</span><span class="accent">í</span><span>gio</span>
+    </div>
+    <div class="cover-caseref">
+      DOC · {{ laudo.caso_id }}
+    </div>
+  </div>
+
+  <div class="cover-center">
+    <div class="cover-eyebrow">LAUDO FORENSE</div>
+    <h1 class="cover-title">{{ laudo.titulo }}</h1>
+    <div class="cover-period">
+      Período analisado: {{ laudo.periodo_inicio }} a {{ laudo.periodo_fim }}
+    </div>
+    {% if laudo.objeto %}
+    <div class="cover-rule"></div>
+    <div class="cover-objeto">{{ laudo.objeto }}</div>
+    {% endif %}
+  </div>
+
+  <div class="cover-metadata">
+    <div class="meta-grid">
+      <div class="meta-cell">
+        <div class="meta-label">CORPUS HASH</div>
+        <div class="meta-value mono">{{ laudo.corpus_hash }}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">MENSAGENS</div>
+        <div class="meta-value mono">{{ "{:,}".format(laudo.total_mensagens).replace(",", ".") }}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">DOCUMENTOS</div>
+        <div class="meta-value mono">{{ laudo.total_documentos }}</div>
+      </div>
+      <div class="meta-cell">
+        <div class="meta-label">CORRELAÇÕES</div>
+        <div class="meta-value mono">{{ laudo.total_correlacoes }}</div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <div>
+        <div class="cff-label">OPERADOR</div>
+        <div class="cff-value">{{ laudo.operador }}</div>
+      </div>
+      <div>
+        <div class="cff-label">VERSÃO · DATA</div>
+        <div class="cff-value mono">v{{ laudo.versao_laudo }} · {{ laudo.data_geracao }}</div>
+      </div>
+      <div>
+        <div class="cff-label">EMITIDO POR</div>
+        <div class="cff-value">Vestígio Tecnologia Ltda</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   RESUMO EXECUTIVO
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="page-content">
+  <div class="section-mark">
+    <div class="section-num">01</div>
+    <h2>Resumo executivo</h2>
+  </div>
+
+  {% if laudo.cliente %}
+  <div class="info-grid">
+    <div class="info-row">
+      <div class="info-label">Cliente</div>
+      <div class="info-value">{{ laudo.cliente }}</div>
+    </div>
+    {% if laudo.processo %}
+    <div class="info-row">
+      <div class="info-label">Processo</div>
+      <div class="info-value mono">{{ laudo.processo }}</div>
+    </div>
+    {% endif %}
+    <div class="info-row">
+      <div class="info-label">Objeto</div>
+      <div class="info-value">{{ laudo.objeto if laudo.objeto else "Análise forense de comunicações digitais" }}</div>
+    </div>
+    <div class="info-row">
+      <div class="info-label">Período</div>
+      <div class="info-value">{{ laudo.periodo_inicio }} a {{ laudo.periodo_fim }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if laudo.resumo_executivo %}
+  <p class="lead">{{ laudo.resumo_executivo }}</p>
+  {% endif %}
+
+  <h3>Achados quantitativos</h3>
+  <p>Foram analisadas <strong>{{ "{:,}".format(laudo.total_mensagens).replace(",", ".") }}</strong> mensagens,
+     <strong>{{ laudo.total_documentos }}</strong> documentos e
+     <strong>{{ laudo.total_audios }}</strong> áudios. O sistema detectou automaticamente
+     <strong>{{ laudo.total_correlacoes }}</strong> correlações de relevância forense entre eventos do corpus.</p>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   SEÇÕES NARRATIVAS
+   ═══════════════════════════════════════════════════════════════ #}
+{% for secao in laudo.secoes_narrativa %}
+<div class="page-content">
+  <div class="section-mark">
+    <div class="section-num">{{ "%02d" | format(loop.index + 1) }}</div>
+    <h2>{{ secao.titulo }}</h2>
+  </div>
+  {% for paragrafo in secao.conteudo.split('\n\n') %}
+  <p>{{ paragrafo }}</p>
+  {% endfor %}
+</div>
+{% endfor %}
+
+{# ═══════════════════════════════════════════════════════════════
+   CRONOLOGIA
+   ═══════════════════════════════════════════════════════════════ #}
+{% if laudo.incluir_cronologia_completa and laudo.cronologia %}
+<div class="page-content">
+  <div class="section-mark">
+    <div class="section-num">{{ "%02d" | format(laudo.secoes_narrativa|length + 2) }}</div>
+    <h2>Cronologia</h2>
+  </div>
+
+  <p class="lead">Sequência temporal de eventos identificados no corpus, apresentada em ordem cronológica crescente.</p>
+
+  <div class="timeline">
+    {% for evento in laudo.cronologia %}
+    <div class="tl-item tl-{{ evento.tipo }}">
+      <div class="tl-date">
+        <div class="tl-date-day">{{ evento.data }}</div>
+        {% if evento.hora %}<div class="tl-date-time">{{ evento.hora }}</div>{% endif %}
+      </div>
+      <div class="tl-body">
+        {% if evento.autor %}<div class="tl-author">{{ evento.autor }}</div>{% endif %}
+        <div class="tl-content">{{ evento.conteudo }}</div>
+        {% if evento.tags %}
+        <div class="tl-tags">
+          {% for tag in evento.tags %}<span class="tl-tag">{{ tag }}</span>{% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════
+   CORRELAÇÕES
+   ═══════════════════════════════════════════════════════════════ #}
+{% if laudo.correlacoes %}
+<div class="page-content">
+  <div class="section-mark">
+    <div class="section-num">{{ "%02d" | format(laudo.secoes_narrativa|length + 3) }}</div>
+    <h2>Correlações detectadas</h2>
+  </div>
+
+  <p class="lead">Relações automáticas identificadas entre eventos do corpus. Cada correlação foi avaliada quanto a sua confiança estatística ({{ laudo.total_correlacoes }} relações totais).</p>
+
+  {% for corr in laudo.correlacoes %}
+  <div class="corr-card corr-{{ corr.tipo|lower }}">
+    <div class="corr-head">
+      <span class="corr-tag">{{ corr.tipo }}</span>
+      <span class="corr-conf">Confiança · <span class="mono">{{ "%.0f" | format(corr.confianca * 100) }}%</span></span>
+    </div>
+    <div class="corr-desc">{{ corr.descricao }}</div>
+    <div class="corr-excerts">
+      <div class="corr-excerpt corr-excerpt-a">
+        <div class="ce-label">Ocorrência A</div>
+        <div class="ce-quote">&ldquo;{{ corr.excerto_a }}&rdquo;</div>
+      </div>
+      <div class="corr-excerpt corr-excerpt-b">
+        <div class="ce-label">Ocorrência B</div>
+        <div class="ce-quote">&ldquo;{{ corr.excerto_b }}&rdquo;</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ═══════════════════════════════════════════════════════════════
+   METADATA FORENSE (encerramento)
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="page-content final-page">
+  <div class="section-mark">
+    <div class="section-num">∞</div>
+    <h2>Metadata forense</h2>
+  </div>
+
+  <p class="lead">Dados técnicos que sustentam a rastreabilidade e a reprodutibilidade deste laudo.</p>
+
+  <table class="forensic-table">
+    <tr>
+      <td class="ft-label">Identificador do caso</td>
+      <td class="ft-value mono">{{ laudo.caso_id }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Hash do corpus</td>
+      <td class="ft-value mono">{{ laudo.corpus_hash }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Período analisado</td>
+      <td class="ft-value">{{ laudo.periodo_inicio }} a {{ laudo.periodo_fim }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Total de mensagens</td>
+      <td class="ft-value mono">{{ "{:,}".format(laudo.total_mensagens).replace(",", ".") }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Total de documentos</td>
+      <td class="ft-value mono">{{ laudo.total_documentos }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Total de áudios</td>
+      <td class="ft-value mono">{{ laudo.total_audios }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Correlações detectadas</td>
+      <td class="ft-value mono">{{ laudo.total_correlacoes }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Operador</td>
+      <td class="ft-value">{{ laudo.operador }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Versão do laudo</td>
+      <td class="ft-value mono">v{{ laudo.versao_laudo }}</td>
+    </tr>
+    <tr>
+      <td class="ft-label">Data de geração</td>
+      <td class="ft-value mono">{{ laudo.data_geracao }}</td>
+    </tr>
+  </table>
+
+  <div class="attestation">
+    <div class="att-label">Atestação</div>
+    <p>Este laudo foi gerado por <strong>Vestígio</strong>, sistema de perícia forense de comunicações digitais operado pela Vestígio Tecnologia Ltda, subsidiária da HCF Investimentos e Participações. Todas as análises são reprodutíveis a partir do corpus identificado pelo hash acima, preservado em cadeia de custódia digital.</p>
+    <p>A autenticidade deste documento pode ser verificada mediante apresentação do corpus original e recomputação do hash sha256.</p>
+  </div>
+
+  {% if laudo.incluir_marca_dagua_certificacao %}
+  <div class="seal">
+    <div class="seal-inner">
+      <div class="seal-mark">V<span class="seal-dot"></span></div>
+      <div class="seal-ring-top">VESTÍGIO · LAUDO CERTIFICADO</div>
+      <div class="seal-ring-bottom">{{ laudo.data_geracao }} · v{{ laudo.versao_laudo }}</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+</body>
+</html>

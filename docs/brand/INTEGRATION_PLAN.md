@@ -1,9 +1,10 @@
 # Vestígio — Plano de Integração com rdo-agent
 
 **Data:** 23/04/2026  
-**Status:** Design system + identidade visual entregues. Laudo Generator Python PENDENTE.
+**Status:** ✅ Identidade visual completa + Laudo Generator importado  
+**Próximo:** Sessão 3 → implementar adapter + CLI + regenerar laudo EVERALDO
 
-## Decisões travadas (do brandbook)
+## Decisões travadas
 
 | Elemento | Valor |
 |---|---|
@@ -15,83 +16,98 @@
 | Monograma principal | M03 (V + selo bordô) |
 | Tagline institucional | "Perícia forense de comunicações digitais" |
 | Tagline evocativa | "Do vestígio ao laudo" |
-| Paleta | Bordô #6B0F1A + Preto #1A1A1A + Paper #F5F1EA + Grafite #4A4A4A + Dourado #8B6F47 |
-| Tipografia | EB Garamond (títulos) + Inter (corpo) + JetBrains Mono (código) |
 
-## Arquitetura de integração
+## Paleta (sem azul)
+
+| Token | Hex | Uso |
+|---|---|---|
+| `--vst-bordo` | #6B0F1A | Primária institucional, CTAs, selos |
+| `--vst-ink` | #1A1A1A | Texto principal |
+| `--vst-graphite` | #4A4A4A | Texto secundário, links (com underline) |
+| `--vst-paper` | #F5F1EA | Canvas, fundo padrão |
+| `--vst-gold` | #8B6F47 | Selos, marcas d'água APENAS |
+
+## Tipografia
+
+- **EB Garamond** — títulos obrigatórios (H1-H4, display, lead)
+- **Inter** — corpo, UI, labels
+- **JetBrains Mono** — evidência forense (hashes, IDs, code)
+
+## Arquitetura do repo
 rdo-agent/  (nome técnico: repo, CLI, package Python)
 │
 └── produto comercial: Vestígio
-├── src/rdo_agent/laudo/     ← Laudo Generator (aguardando upload)
-├── src/rdo_agent/web/       ← UI Web (Sessão 4, futura)
-└── docs/brand/              ← Ativos de marca (este diretório)
+│
+├── docs/brand/                     ← REFERÊNCIA INSTITUCIONAL
+│   ├── Vestigio-Brandbook-v1.0.pdf
+│   ├── Laudo-Exemplo-Santa-Quiteria.pdf
+│   ├── design-system.html
+│   ├── showcase.html
+│   ├── design-skill/               ← skill agentic + UI kit React
+│   ├── wordmarks/ (V01-V06 SVG)
+│   ├── monograms/ (M01, M03 SVG)
+│   ├── lockups/ (L01-L03 SVG)
+│   ├── palette/ social/ favicons/
+│   └── docs/ (Letterhead DOCX, Deck PPTX)
+│
+├── src/rdo_agent/laudo/            ← ✅ LAUDO GENERATOR IMPORTADO
+│   ├── init.py
+│   ├── vestigio_laudo.py           (LaudoGenerator + dataclasses)
+│   ├── gen_laudo_example.py        (exemplo funcional)
+│   ├── README.md                   (guia integração)
+│   ├── templates/laudo.html
+│   ├── static/laudo.css
+│   └── fonts/ (4 VF compactas)
+│
+└── src/rdo_agent/web/static/       ← USO PRODUTIVO (Sessão 4)
+├── css/design-tokens.css
+├── fonts/ (6 VF completas)
+├── logos/ (SVGs)
+└── favicons/ (16/32/48/180/192/512 + .ico)
 
-## O que está no repo agora
+## Status dos ativos
 
-### docs/brand/
-- `Vestigio-Brandbook-v1.0.pdf` — manual de marca 34 páginas
-- `design-system.html` — tokens CSS e tipografia
-- `showcase.html` — comparação visual dos ativos
-- `Laudo-Exemplo-Santa-Quiteria.pdf` — referência de qualidade alvo
+### ✅ TODOS no repo agora
+- Brandbook PDF 34 páginas
+- Design skill completo (SKILL.md + tokens + UI kit JSX)
+- Logos PNG + SVG vetoriais (V01-V06, M01/M03, L01-L03)
+- 3 famílias de fonte self-hosted
+- Social assets (avatar, LinkedIn banner, OG image)
+- Ativos operacionais (Letterhead DOCX, Deck PPTX)
+- Favicons completos
+- **Laudo Generator Python + templates + static + fontes**
+- Laudo exemplo de referência
 
-### docs/brand/docs/
-- `Vestigio-Letterhead.docx` — papel timbrado A4 institucional
-- `Vestigio-Deck-Template.pptx` — template 8 slides 16:9
+## Próximos passos
 
-### docs/brand/wordmarks/
-- V06 (wordmark principal com í bordô)
-
-### docs/brand/monograms/
-- M01 (institucional formal, baseline rule)
-- M03 (principal, evidence mark)
-
-### docs/brand/lockups/
-- L01 (institucional com tagline descritiva)
-- L02 (evocativo com "Do vestígio ao laudo")
-- L03 (horizontal com monograma)
-
-### docs/brand/palette/
-- palette-swatch.png — especificação cromática visual
-
-### docs/brand/social/
-- avatar-square-400x400.png
-- linkedin-banner-1584x396.png
-- og-image-1200x630.png
-
-## Ativos PENDENTES (precisam vir do Claude Designer)
-
-### Críticos para Sessão 3
-- `06-laudo-generator/` — pacote Python completo do gerador de laudo
-  - `vestigio_laudo.py` (módulo principal com LaudoGenerator + dataclasses)
-  - `adapter.py` (rdo_to_vestigio_data)
-  - `templates/laudo.html` (template Jinja2)
-  - `static/laudo.css` (CSS Vestígio)
-  - `fonts/` (EB Garamond, Inter, JetBrains Mono — embarcadas)
-  - `gen_laudo_example.py` (exemplo executável)
-
-### Úteis para Sessão 4 (UI Web)
-- SVGs vetoriais de wordmarks, monogramas e lockups (atualmente só temos PNG)
-- Favicon set completo (16/32/48/180/192/512 + .ico)
-- Variações adicionais de wordmarks (V01, V02, V04, V05) para fallbacks
-
-## Roadmap de integração
-
-### Sessão 3 — Integração Laudo Generator (aguardando uploads)
-1. Copiar `06-laudo-generator/` completo para `src/rdo_agent/laudo/`
-2. Criar `src/rdo_agent/laudo/adapter.py` conectando estado rdo-agent → LaudoData
-3. Adicionar dependências: `weasyprint>=68.0`, `jinja2>=3.0`
-4. CLI: `rdo-agent export-laudo --corpus X --output Y.pdf [--certified]`
-5. Regenerar laudo EVERALDO com fidelidade ao exemplo entregue
+### Sessão 3 (pronta pra disparar)
+1. Criar `src/rdo_agent/laudo/adapter.py`:
+   - Função `rdo_to_vestigio_data(corpus_id, state) → LaudoData`
+   - Mapeia estado interno (narrativas, correlações, cronologia) → dataclasses do Vestígio
+2. Adicionar dependências ao `pyproject.toml`:
+weasyprint>=68.0
+jinja2>=3.0
+3. Criar CLI: `rdo-agent export-laudo --corpus X --output Y.pdf [--certified]`
+4. Regenerar laudo EVERALDO com fidelidade ao exemplo entregue
+5. Testes de integração
 6. Tag: `v1.0-vestigio-integrated`
 
-### Sessão 4 — UI Web (posterior)
-1. FastAPI + Jinja templates consumindo design system
-2. Reutilizar paleta, tipografia e componentes do brandbook
-3. Telas: CaseList, CaseDetail, LaudoView, GTEditor
+Estimativa: 2-3h autônoma, $0 (zero API calls).
 
-## Referências visuais
+### Sessão 4 (UI Web)
+FastAPI + Jinja templates consumindo design system.
+Traduz UI Kit React JSX → templates server-rendered.
+Tokens, fontes e logos já em `src/rdo_agent/web/static/`.
 
-- Brandbook completo: `docs/brand/Vestigio-Brandbook-v1.0.pdf`
-- Design tokens CSS: `docs/brand/design-system.html`
-- Showcase visual: `docs/brand/showcase.html`
-- Qualidade alvo do laudo: `docs/brand/Laudo-Exemplo-Santa-Quiteria.pdf`
+## Princípios não-negociáveis (do SKILL.md)
+
+1. Sem azul em lugar algum
+2. Serifa obrigatória em títulos (EB Garamond)
+3. Sem emojis em qualquer superfície
+4. Sem gradientes, glassmorphism, ilustrações chapadas
+5. Densidade alta (rejeitar heros vazios)
+6. Print-safe em preto e branco
+7. Tabelas editoriais, não dashboard
+8. Bordô com parcimônia (autoridade, não decoração)
+9. Tom: frases curtas, vocabulário técnico forense, zero hype
+10. Mínimo 15-16px no corpo, line-height 1.6-1.7
