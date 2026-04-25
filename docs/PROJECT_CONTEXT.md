@@ -830,3 +830,102 @@ em PDF forense com identidade visual Vestígio.
 
 > Se você leu até aqui como IA, você tem **contexto suficiente** pra assumir o projeto sem perda de qualidade. Boa sessão.
 
+
+---
+
+## Addendum (25/04/2026 noite) — Roadmap reformulado pós-v1.1
+
+Após análise de capacidade do sistema atual em conversa de 25/04
+(pergunta: "consegue processar conversa de 5GB / 2 anos?"), o
+roadmap pós-v1.1 foi reformulado. UI Web foi DESLOCADA porque:
+
+1. Construir UI sobre v1.1 single-canal exigiria refazer ela em
+   v2.0 multi-canal (trabalho duplicado).
+2. Eficiência de processamento e resiliência são pré-requisitos
+   pra qualquer uso real em corpus grande.
+3. Multi-canal é o salto de valor 10-20× — sem ele, a UI seria UI
+   de produto incompleto.
+
+### Roadmap reformulado — 12 sessões consecutivasv1.1-narrator-flexible (atual)
+↓
+GRUPO 2 — Resiliência (Sessões 6 + 7)
+├── Sessão 6 → v1.2-resilient-pipeline
+│   • #44 state machine no DB
+│   • #43 dedup re-ingestão
+│   • #53 logging JSON estruturado
+│   • #54 circuit breaker + rate limiter
+└── Sessão 7 → v1.3-safe-ingestion
+• #55 pre-flight check (custo/tempo/disco)
+• #41 ingestão streaming (sem RAM)
+• #42 mídia copy-on-demand
+• ADR-006 — decisão sobre tabela events
+↓
+GRUPO 3 — Eficiência custo (Sessões 8 + 9)
+├── Sessão 8 → v1.4-efficient-classify
+│   • #45 transcribe checkpoint
+│   • #46 classify cache + dedup + batch
+└── Sessão 9 → v1.5-efficient-vision
+• #47 vision filtro cascata
+• #48 frames de vídeo
+• #49 OCR roteamento
+↓
+GRUPO 4 — Escala analítica (Sessões 10 + 11)
+├── Sessão 10 → v1.6-scale-analytics
+│   • #50 correlator janela + workers
+│   • #51 narrator hierárquico
+│   • #52 cache narrativas
+└── Sessão 11 → v1.7-validated-at-scale
+• Validação empírica em corpus 5GB+
+↓
+GRUPO 5 — Multi-canal (Sessões 12 + 13)
+├── Sessão 12 → v2.0-alpha-multi-canal
+│   • #56 refactor obra↔canal (BREAKING)
+└── Sessão 13 → v2.1-consolidator
+• #57 cross-channel + ledger consolidado
+↓
+GRUPO 6 — Outputs modulares (Sessão 14)
+└── Sessão 14 → v2.2-modular-outputs
+• #58 framework plugável (laudo/RDO/obsidian/custom)
+↓
+GRUPO 7 — UI Web (DESLOCADA, executada após v2.2)
+└── Sessão 15+ → v2.3-web-ui
+• FastAPI + Jinja consumindo design system
+• Operação multi-canal nativa via browser
+
+### Total estimado
+
+- 12 sessões consecutivas
+- ~30-40h autônomas
+- ~$36-66 custo (incluindo validação real Sessão 11 ~$30-60 única vez)
+- Sem validação real: sessões de código somam ~$5-7
+
+### Princípios
+
+- 1 sessão = 1 tag estável
+- Cada sessão fechável independentemente
+- Pausa entre sessões permitida e segura
+- Web UI só após produto v2.2 estável (multi-canal + outputs modulares)
+- Casos próprios (Milton Campos, etc) só após v2.2 também — política
+  travada em conversa de 24/04: "não vamos usar Milton Campos
+  enquanto não tivermos sistema pronto"
+
+### Rationale de ordemResiliência primeiro: porque sem retomada, processar grande é
+roleta russa
+Eficiência segundo: porque sem cache/batch/dedup, processar grande
+é caro caro
+Escala terceiro: porque mata gargalos analíticos
+Multi-canal quarto: porque é o salto v1→v2 e exige tudo anterior
+Outputs por último: liberta o sistema pra qualquer formato
+UI Web depois: sobre produto multi-canal estável, sem retrabalho
+
+### Estado atual de dívidas (pós-v1.1)Dívidas v0.x-v1.0 originais: 11 → 0 (TODAS FECHADAS em Grupo 1)
+Dívidas novas pra escalar 5GB: 18 (#41-#58)
+├── Sessão 6: #43, #44, #53, #54
+├── Sessão 7: #41, #42, #55 + ADR-006
+├── Sessão 8: #45, #46
+├── Sessão 9: #47, #48, #49
+├── Sessão 10: #50, #51, #52
+├── Sessão 12: #56
+├── Sessão 13: #57
+└── Sessão 14: #58
+

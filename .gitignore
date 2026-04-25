@@ -67,3 +67,7 @@ reports/old_pre-*
 # poluir o modulo. Output default de gen_laudo_example.py aponta pra
 # /tmp/. Este glob garante que futuras regressoes nao re-entrem.
 src/rdo_agent/laudo/*.pdf
+
+# Outputs operacionais regeneráveis (narrativas, reports)
+# Não versionados — saídas do pipeline a partir de código + corpus
+reports/narratives/
