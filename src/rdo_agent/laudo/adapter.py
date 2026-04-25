@@ -526,8 +526,11 @@ def _build_cronologia(
         'decisao' (categoria-dependente). Prioriza human_reviewed ou
         confidence_model alto.
 
-    Fallback da divida #35 (events table esta vazia): dados saem de
-    financial_records + classifications + messages.
+    Implementacao canonica desde v1.0: dados saem de
+    financial_records + classifications + messages. (Era originalmente
+    descrita como "fallback" da divida #35; com a Sessao 7 / ADR-006
+    a tabela `events` foi removida do schema, e este caminho passou
+    de fallback a unica implementacao.)
     """
     events: list[EventoCronologia] = []
 

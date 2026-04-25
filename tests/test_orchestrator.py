@@ -19,7 +19,9 @@ from rdo_agent.orchestrator import (
     run_worker,
 )
 
-# Conjunto completo do Blueprint §7.2.
+# Conjunto completo do Blueprint §7.2 (atualizado em Sessão 7 — ADR-006
+# removeu a tabela `events` do schema; ver
+# docs/ADR-006-tabela-events-status.md).
 EXPECTED_TABLES = {
     "tasks",
     "messages",
@@ -28,7 +30,6 @@ EXPECTED_TABLES = {
     "api_calls",
     "transcriptions",
     "visual_analyses",
-    "events",
     "clusters",
 }
 

@@ -284,24 +284,13 @@ CREATE INDEX IF NOT EXISTS idx_documents_file ON documents(file_id);
 
 
 -- ---------------------------------------------------------------------------
--- events — unidades classificadas que alimentam o agente-engenheiro
--- (Blueprint §6.3: payload de entrada do Claude)
+-- (events) — REMOVIDA na Sessão 7 (ADR-006). A tabela existia desde
+-- Sprint 1 mas nunca foi populada nem lida em produção. Adapter de
+-- laudo constrói cronologia diretamente de classifications +
+-- financial_records desde v1.0. Se uso futuro reaparecer (consolidador
+-- multi-canal Sessão 12+), design proper supera o legado.
+-- Migration `_migrate_sessao7_drop_events_table` em orchestrator/__init__.py.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS events (
-    event_id          TEXT PRIMARY KEY,
-    obra              TEXT NOT NULL,
-    event_date        TEXT NOT NULL,                   -- YYYY-MM-DD
-    event_time        TEXT,                            -- HH:MM
-    categories        TEXT NOT NULL DEFAULT '[]',      -- JSON array
-    content           TEXT NOT NULL,
-    confidence        TEXT,                            -- high | medium | low
-    evidence_refs     TEXT NOT NULL DEFAULT '[]',      -- JSON array de file_ids
-    source_message_id TEXT,
-    created_at        TEXT NOT NULL,
-    FOREIGN KEY (source_message_id) REFERENCES messages(message_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_events_obra_date ON events(obra, event_date);
 
 
 -- ---------------------------------------------------------------------------

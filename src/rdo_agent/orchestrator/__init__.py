@@ -150,6 +150,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     _migrate_superseded_by_sprint4_op11(conn)
     _migrate_sprint5_fase_a_b(conn)
     _migrate_sessao6_message_content_hash(conn)
+    _migrate_sessao7_drop_events_table(conn)
     conn.commit()
     return conn
 
@@ -437,6 +438,29 @@ def _migrate_sessao6_message_content_hash(conn: sqlite3.Connection) -> None:
             WHERE content_hash IS NOT NULL
         """
     )
+
+
+def _migrate_sessao7_drop_events_table(conn: sqlite3.Connection) -> None:
+    """
+    Sessão 7 — remove a tabela ``events`` do schema (ADR-006 resolvido).
+
+    Investigação durante Sessão 7 confirmou:
+    - 0 rows na tabela em todos os vaults inspecionados
+    - 0 referências de produção a ``INSERT INTO events`` / ``FROM events``
+    - 0 testes referenciando a tabela
+    - Adapter de laudo (`src/rdo_agent/laudo/adapter.py`) construiu seu
+      próprio caminho de cronologia desde v1.0 sem nunca depender da
+      tabela
+
+    A tabela foi criada na Sprint 1 (Blueprint §6.3 antigo) prevista
+    para um event_extractor que nunca foi implementado. Se demanda
+    futura aparecer (consolidador multi-canal — Sessão 12+), design
+    proper supera tabela legada de 9 colunas dormente.
+
+    Idempotente: ``DROP TABLE IF EXISTS`` + ``DROP INDEX IF EXISTS``.
+    """
+    conn.execute("DROP INDEX IF EXISTS idx_events_obra_date")
+    conn.execute("DROP TABLE IF EXISTS events")
 
 
 def compute_message_content_hash(
