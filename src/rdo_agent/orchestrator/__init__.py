@@ -151,6 +151,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     _migrate_sprint5_fase_a_b(conn)
     _migrate_sessao6_message_content_hash(conn)
     _migrate_sessao7_drop_events_table(conn)
+    _migrate_sessao10_relax_narratives_scope_check(conn)
     conn.commit()
     return conn
 
@@ -438,6 +439,80 @@ def _migrate_sessao6_message_content_hash(conn: sqlite3.Connection) -> None:
             WHERE content_hash IS NOT NULL
         """
     )
+
+
+def _migrate_sessao10_relax_narratives_scope_check(
+    conn: sqlite3.Connection,
+) -> None:
+    """
+    Sessão 10 — relaxa CHECK constraint em ``forensic_narratives.scope``
+    para permitir narrator hierárquico (#51 / ADR-010).
+
+    Schema legado: ``CHECK (scope IN ('day', 'obra_overview'))`` —
+    bloqueava inclusão de scopes ``week``, ``month``, ``quarter``,
+    ``adversarial``. Esta migration recria a tabela sem CHECK em
+    scope; validação dos scopes válidos passa a ser feita no código
+    Python (``narrator.VALID_SCOPES``), que vira a single source of
+    truth (mais flexível que constraint SQL).
+
+    Idempotente: detecta se CHECK existe consultando ``sqlite_master``;
+    skip se já removido. Preserva todas as rows + índices + UNIQUE.
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master "
+        "WHERE type='table' AND name='forensic_narratives'",
+    ).fetchone()
+    if row is None:
+        return  # tabela ainda não existe
+    sql = row[0] or ""
+    if "CHECK (scope IN" not in sql and "CHECK(scope IN" not in sql:
+        return  # CHECK já removido (migration anterior)
+
+    # Cirurgia: dump rows, drop, recreate sem CHECK, reinsert.
+    rows = conn.execute(
+        "SELECT id, obra, scope, scope_ref, narrative_text, dossier_hash, "
+        "model_used, prompt_version, api_call_id, events_count, confidence, "
+        "validation_checklist_json, created_at FROM forensic_narratives",
+    ).fetchall()
+
+    conn.executescript(
+        """
+        DROP INDEX IF EXISTS idx_narratives_obra_scope;
+        ALTER TABLE forensic_narratives RENAME TO forensic_narratives_legacy;
+
+        CREATE TABLE forensic_narratives (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            obra TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            scope_ref TEXT,
+            narrative_text TEXT NOT NULL,
+            dossier_hash TEXT NOT NULL,
+            model_used TEXT NOT NULL,
+            prompt_version TEXT NOT NULL,
+            api_call_id INTEGER,
+            events_count INTEGER,
+            confidence REAL,
+            validation_checklist_json TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (api_call_id) REFERENCES api_calls(id),
+            UNIQUE (obra, scope, scope_ref, dossier_hash)
+        );
+        CREATE INDEX idx_narratives_obra_scope
+            ON forensic_narratives(obra, scope, scope_ref);
+        """
+    )
+    if rows:
+        conn.executemany(
+            """
+            INSERT INTO forensic_narratives
+                (id, obra, scope, scope_ref, narrative_text, dossier_hash,
+                 model_used, prompt_version, api_call_id, events_count,
+                 confidence, validation_checklist_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [tuple(r) for r in rows],
+        )
+    conn.execute("DROP TABLE forensic_narratives_legacy")
 
 
 def _migrate_sessao7_drop_events_table(conn: sqlite3.Connection) -> None:

@@ -43,16 +43,27 @@ def test_forensic_narratives_columns(db):
     assert expected.issubset(cols)
 
 
-def test_forensic_narratives_scope_check(db):
-    """CHECK (scope IN ('day', 'obra_overview')) deve bloquear valor invalido."""
-    with pytest.raises(sqlite3.IntegrityError):
-        db.execute(
-            """INSERT INTO forensic_narratives (obra, scope, narrative_text,
-            dossier_hash, model_used, prompt_version, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            ("OBRA_X", "invalid_scope", "text", "h", "m", "v",
-             "2026-04-22T00:00:00Z"),
-        )
+def test_forensic_narratives_scope_no_check_after_sessao10(db):
+    """
+    Sessão 10 / ADR-010 removeu CHECK constraint em scope para
+    permitir narrator hierárquico (week/month/quarter/etc).
+    Validação de scope passou para Python (`narrator.VALID_SCOPES`).
+    Schema agora aceita qualquer string em scope.
+    """
+    # Insert com scope arbitrário não levanta IntegrityError mais.
+    db.execute(
+        """INSERT INTO forensic_narratives (obra, scope, narrative_text,
+        dossier_hash, model_used, prompt_version, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        ("OBRA_X", "previously_invalid", "text", "h", "m", "v",
+         "2026-04-22T00:00:00Z"),
+    )
+    db.commit()
+    n = db.execute(
+        "SELECT COUNT(*) FROM forensic_narratives WHERE scope = ?",
+        ("previously_invalid",),
+    ).fetchone()[0]
+    assert n == 1
 
 
 def test_forensic_narratives_unique_key_enforced(db):
