@@ -149,6 +149,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     _migrate_visual_analyses_archive_sprint4_op9(conn)
     _migrate_superseded_by_sprint4_op11(conn)
     _migrate_sprint5_fase_a_b(conn)
+    _migrate_sessao6_message_content_hash(conn)
     conn.commit()
     return conn
 
@@ -380,6 +381,78 @@ def _migrate_sprint5_fase_a_b(conn: sqlite3.Connection) -> None:
                 ON correlations(obra, correlation_type);
             """
         )
+
+
+def _migrate_sessao6_message_content_hash(conn: sqlite3.Connection) -> None:
+    """
+    Sessão 6 — adiciona ``content_hash`` em ``messages`` + UNIQUE(obra,
+    content_hash) para dedup de re-ingestão (#43).
+
+    A dedup primária continua sendo o ``message_id`` determinístico
+    (``msg_{obra}_L{line_number}``), que protege contra re-ingest de
+    ZIP idêntico. ``content_hash`` é a **camada complementar**: se o
+    .txt for editado e a numeração de linhas deslocar, mensagens com
+    mesmo ``(timestamp, sender, content)`` não duplicam.
+
+    Idempotente: ALTER TABLE só roda se a coluna não existir;
+    backfill cobre rows com hash NULL; índice UNIQUE é
+    ``CREATE INDEX IF NOT EXISTS``.
+    """
+    import hashlib
+
+    existing = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(messages)")
+    }
+    if "content_hash" not in existing:
+        conn.execute("ALTER TABLE messages ADD COLUMN content_hash TEXT")
+
+    # Backfill em rows sem hash. Hash = sha256(timestamp || sender || content)
+    # truncado em 16 hex chars (64 bits).
+    rows_to_backfill = conn.execute(
+        """
+        SELECT message_id, timestamp_whatsapp, sender, content
+          FROM messages
+         WHERE content_hash IS NULL OR content_hash = ''
+        """
+    ).fetchall()
+    for row in rows_to_backfill:
+        digest_input = (
+            f"{row['timestamp_whatsapp']}||"
+            f"{row['sender'] or ''}||"
+            f"{row['content'] or ''}"
+        )
+        h = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:16]
+        conn.execute(
+            "UPDATE messages SET content_hash = ? WHERE message_id = ?",
+            (h, row["message_id"]),
+        )
+
+    # UNIQUE(obra, content_hash). Partial index — só cobra rows com hash
+    # preenchido, evitando bloquear backfill em pipeline incremental.
+    conn.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedup_content_hash
+            ON messages(obra, content_hash)
+            WHERE content_hash IS NOT NULL
+        """
+    )
+
+
+def compute_message_content_hash(
+    timestamp: str, sender: str | None, content: str | None,
+) -> str:
+    """
+    Hash determinístico para dedup defensiva de mensagens (#43).
+
+    Retorna 16 hex chars (sha256 truncado). Espaço de hash = 2^64 ≈
+    18 quintilhões — dezenas de milhares de mensagens por canal são
+    seguras contra colisão acidental.
+    """
+    import hashlib
+
+    digest_input = f"{timestamp}||{sender or ''}||{content or ''}"
+    return hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:16]
 
 
 def enqueue(conn: sqlite3.Connection, task: Task) -> int:

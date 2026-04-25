@@ -200,7 +200,12 @@ def run_ingest(
 
     conn = init_db(vault_path)
     try:
-        _write_messages_to_db(conn, messages, obra)
+        inserted, skipped = _write_messages_to_db(conn, messages, obra)
+        if skipped:
+            log.info(
+                "ingest: %d mensagens novas, %d duplicatas skipped (#43)",
+                inserted, skipped,
+            )
         _write_files_to_db(conn, files_meta, media_dir, messages, media_to_message_id, obra)
         _enqueue_downstream_tasks(conn, files_meta, obra)
         conn.commit()
@@ -330,7 +335,24 @@ def _build_media_to_message_id(messages: list[ParsedMessage], obra: str) -> dict
     return out
 
 
-def _write_messages_to_db(conn, messages: list[ParsedMessage], obra: str) -> None:
+def _write_messages_to_db(
+    conn, messages: list[ParsedMessage], obra: str,
+) -> tuple[int, int]:
+    """
+    Insere mensagens com dedup duplo (#43, Sessão 6):
+
+    1. ``message_id`` determinístico (``msg_{obra}_L{line_number}``)
+       protege contra re-ingest de ZIP idêntico — INSERT OR IGNORE
+       silenciosamente skip duplicatas.
+    2. ``content_hash`` (sha256 de ``timestamp || sender || content``,
+       16 hex chars) com UNIQUE(obra, content_hash) protege contra
+       re-ingest de ZIP editado em que line_numbers deslocaram.
+
+    Returns:
+        (inserted, skipped_duplicates)
+    """
+    from rdo_agent.orchestrator import compute_message_content_hash
+
     rows = []
     now = _now_iso_utc()
     for m in messages:
@@ -346,16 +368,25 @@ def _write_messages_to_db(conn, messages: list[ParsedMessage], obra: str) -> Non
             int(m.message_type == MessageType.STICKER),
             m.timestamp_raw,
             now,
+            compute_message_content_hash(
+                m.timestamp.isoformat(), m.sender, m.content,
+            ),
         ))
-    conn.executemany(
+    cur = conn.executemany(
         """
-        INSERT INTO messages (
+        INSERT OR IGNORE INTO messages (
             message_id, obra, timestamp_whatsapp, sender, content, media_ref,
-            is_deleted, is_edited, is_sticker, raw_line, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            is_deleted, is_edited, is_sticker, raw_line, created_at,
+            content_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rows,
     )
+    # rowcount em executemany de SQLite reflete total de rows efetivamente
+    # alteradas (INSERT OR IGNORE pula sem somar).
+    inserted = cur.rowcount or 0
+    skipped = len(rows) - inserted
+    return inserted, skipped
 
 
 def _write_files_to_db(
