@@ -71,6 +71,41 @@ MAX_TOKENS: int = 10240
 # com --context --adversarial (precisa caber Verificacao GT + Contestacoes
 # Hipoteticas + Ledger + Padroes + Observacoes). Custo marginal baixo
 # (output $15/1M tokens; tokens extras so sao faturados se usados).
+#
+# Sessao 5 (#32): MAX_TOKENS migrou para tabela por scope. A constante
+# MAX_TOKENS acima permanece como fallback conservador para escopos
+# desconhecidos. Use _max_tokens_for_scope(scope) na invocacao.
+MAX_TOKENS_BY_SCOPE: dict[str, int] = {
+    "day":           6144,
+    "week":          8192,    # preparacao p/ Sessao 6+ (week summaries)
+    "month":         10240,   # preparacao p/ Sessao 6+ (month summaries)
+    "overview":      16384,
+    "obra_overview": 16384,
+}
+
+
+def _max_tokens_for_scope(scope: str) -> int:
+    """
+    Resolve max_tokens dinamicamente por scope. Override possivel via
+    env var RDO_AGENT_MAX_TOKENS_OVERRIDE_<SCOPE_UPPER> (ex:
+    RDO_AGENT_MAX_TOKENS_OVERRIDE_OVERVIEW=20000).
+
+    Scope desconhecido cai no fallback MAX_TOKENS (conservador).
+    """
+    import os
+
+    if scope:
+        env_key = f"RDO_AGENT_MAX_TOKENS_OVERRIDE_{scope.upper()}"
+        override = os.environ.get(env_key)
+        if override is not None:
+            try:
+                return int(override)
+            except ValueError:
+                log.warning(
+                    "%s='%s' invalido; ignorando override.",
+                    env_key, override,
+                )
+    return MAX_TOKENS_BY_SCOPE.get(scope, MAX_TOKENS)
 ANTHROPIC_TIMEOUT_SEC: float = 300.0
 ANTHROPIC_MAX_RETRIES: int = 3
 RETRY_DELAYS_SEC: tuple[float, float] = (1.0, 3.0)
@@ -265,9 +300,10 @@ def _call_anthropic_with_retry(
     user_content = NARRATOR_USER_TEMPLATE.format(
         dossier_json=dossier_json, scope=scope,
     )
+    max_tokens = _max_tokens_for_scope(scope)
     request_body = {
         "model": MODEL,
-        "max_tokens": MAX_TOKENS,
+        "max_tokens": max_tokens,
         "temperature": TEMPERATURE,
         "system": system_prompt,
         "messages": [{"role": "user", "content": user_content}],
@@ -394,6 +430,14 @@ def narrate(
         system_prompt=system_prompt,
     )
     cost = _compute_cost_usd(pt, ct, MODEL)
+
+    # Observabilidade do budget de tokens (#32 — calibracao futura)
+    allocated = _max_tokens_for_scope(scope)
+    log.info(
+        "narrator tokens: scope=%s used=%d allocated=%d (%.0f%%) cost=$%.4f",
+        scope or "<unknown>", ct, allocated,
+        (ct / allocated * 100) if allocated else 0.0, cost,
+    )
 
     self_assessment, body = _extract_self_assessment(text)
 
