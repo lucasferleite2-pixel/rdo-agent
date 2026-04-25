@@ -267,29 +267,26 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.3-safe-ingestion`
+### Estado atual: `v1.4-efficient-classify`
 
-Última release de produto: `v1.3-safe-ingestion` (25/04/2026).
+Última release de produto: `v1.4-efficient-classify` (25/04/2026).
 
 - `v1.0.2` (higiene documental): docs alinhados com código (sem
   mudança de comportamento).
-- `v1.0.3` (cleanup): 7 dívidas cosméticas/menores fechadas
-  (rename de seção do RDO, deps WeasyPrint, smart_truncate, strip_emoji,
-  CSS Vestígio extra, pyMuPDF para validação, threshold adversarial).
-- `v1.1` (narrator flexível): streaming via flag `--stream`,
-  `MAX_TOKENS` dinâmico por scope com override env, validator com
-  severity tiers, detector novo `CONTRACT_RENEGOTIATION`.
-- `v1.2` (pipeline resiliente): `PipelineStateManager` (wrapper sobre
-  tabela `tasks` — ADR-007) com CLI `pipeline-status` /
-  `pipeline-reset`, dedup defensivo de messages via `content_hash`,
-  logging JSONL estruturado em `~/.rdo-agent/logs/` com CLI `watch` /
-  `stats`, primitivas de resiliência (`CircuitBreaker`, `RateLimiter`,
-  `CostQuota`).
-- `v1.3` (ingestão segura): parser streaming `iter_chat_messages`
-  (RAM bounded em arquivos de centenas de MB), `MediaSource` para
-  copy-on-demand de mídia (sem `extractall` up-front), pre-flight
-  check com CLI `estimate` (custo/tempo/disco antes de processar),
-  tabela `events` REMOVIDA do schema (ADR-006 resolvido).
+- `v1.0.3` (cleanup): 7 dívidas cosméticas/menores fechadas.
+- `v1.1` (narrator flexível): streaming, MAX_TOKENS dinâmico,
+  severity tiers, detector CONTRACT_RENEGOTIATION.
+- `v1.2` (pipeline resiliente): `PipelineStateManager`, dedup
+  content_hash, logging JSONL, primitivas de resiliência.
+- `v1.3` (ingestão segura): streaming parser, `MediaSource`
+  copy-on-demand, pre-flight `estimate`, ADR-006 resolvido.
+- `v1.4` (eficiência custo classify): `transcribe_pending` com
+  idempotência + checkpoint integrados ao GRUPO 2; classify
+  pipeline 3-tier — `ClassifyCache` exact-match, `JaccardDedup`
+  léxico (sem deps novas), `BatchClassifier` para OpenAI Batch
+  API (50% desconto). ADR-008 trava rationale; dívida #59
+  registrada para upgrade futuro a sentence-transformers se
+  evidência de produção justificar.
 
 Para roadmap completo e estado das sprints, ver:
 

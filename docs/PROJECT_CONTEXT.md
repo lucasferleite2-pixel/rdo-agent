@@ -2,7 +2,7 @@
 
 > **Propósito deste documento:** servir como briefing completo pra qualquer nova conversa de IA (Claude, GPT, etc) assumir o projeto sem perda de contexto. Leia de ponta a ponta antes de tomar qualquer decisão técnica ou arquitetural.
 >
-> **Última atualização:** 25/04/2026 — versão rdo-agent v1.3-safe-ingestion (Sessão 7: streaming parser + MediaSource copy-on-demand + pre-flight check + ADR-006 resolvido)
+> **Última atualização:** 25/04/2026 — versão rdo-agent v1.4-efficient-classify (Sessão 8: transcribe checkpoint + classify cache 3-tier; ADR-008; dívida #59 registrada)
 
 ---
 
@@ -454,6 +454,16 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
               tabela `events` REMOVIDA (ADR-006 resolvido — opção B).
               40 testes novos. 738 testes total verde. Fim do GRUPO 2
               (resiliência) do roadmap reformulado.
+✅ v1.4    — Eficiência custo classify (Sessão 8 — #45, #46):
+              `transcribe_pending` orchestrator com idempotência +
+              checkpoint + integração GRUPO 2 (state machine + logger
+              + cost tracking + circuit breaker `openai_whisper`);
+              classify pipeline 3-tier — `ClassifyCache` exact-match,
+              `JaccardDedup` léxico (sem deps novas), `BatchClassifier`
+              para OpenAI Batch API (50% desconto). ADR-008 trava
+              rationale; dívida #59 registrada para upgrade futuro
+              a sentence-transformers. 53 testes novos. 791 testes
+              total verde.
 
 > **Nota sobre numeração de Sessões pós-v1.0:** ver `docs/ADR-005-numeracao-sessoes-pos-v1.md`.
 > A audit detectou que o rótulo "Sessão 4" estava sendo usado em duas
@@ -684,15 +694,50 @@ nova. As dívidas pendentes (antes em 9.7) viraram seção **9.8** ou
   idempotente. Adapter de laudo (que era descrito como "fallback"
   da #35) virou implementação canônica oficial.
 
-### 9.10 Pendentes (pós-v1.3) — 11 abertas (GRUPOs 3+ do roadmap)
+### 9.10 Resolvidas em Sessão 8 (v1.4-efficient-classify)
+
+2 dívidas fechadas + 1 nova registrada:
+
+- ~~#45~~: `transcribe_pending(conn, obra, ...)` em
+  `src/rdo_agent/transcriber/__init__.py` — `a042b5d`. Drena tasks
+  TRANSCRIBE via PipelineStateManager; idempotência via query em
+  transcriptions ANTES de chamar Whisper (poupa $0.006/min real);
+  integração com `cost_event` + `CostQuota` + `CircuitBreaker`
+  (singleton novo `openai_whisper`); falhas marcam state.fail e
+  loop continua; `force=True` ignora dedup; callbacks
+  on_skip/on_done/on_fail. **Drop do plano original**: P1
+  refutada (Whisper é API, não local) → modelo configurável saiu
+  do escopo (whisper-1 é único endpoint OpenAI).
+- ~~#46~~: classify pipeline 3-tier — `1c7253b`:
+  - **Nível 1 (`ClassifyCache`)**: exact-match com sha256(normalize
+    +pv)[:16], tabela `classify_cache`, hit_count para analytics,
+    versionado por prompt_version (troca invalida automaticamente).
+  - **Nível 2 (`JaccardDedup`)**: similaridade léxica
+    `|A∩B|/|A∪B|` sobre tokens, janela rolante max_pool=500,
+    threshold default 0.80, **zero deps novas**. Substitui
+    sentence-transformers (~2GB PyTorch) por escolha consciente.
+  - **Nível 3 (`BatchClassifier`)**: OpenAI Batch API (50%
+    desconto, 24h latência), tabela `batches` com submit/poll/
+    fetch lifecycle. Integração com classify_pending fica para
+    sessão futura quando wiring fino for necessário.
+  - ADR-008 trava rationale.
+
+**Dívida nova #59 registrada (não fechada — adiada com critérios)**:
+
+- **#59** — Upgrade dedup semântico de Jaccard para
+  sentence-transformers se evidência empírica de produção
+  justificar. Triggers: hit rate Jaccard < 15% em 50k+ msgs;
+  narrator V4 reclamando de ruído; falsos negativos em revisão.
+  Estimativa: 1 sprint pequena. Decisão concreta vem em ADR-009
+  futuro.
+
+### 9.11 Pendentes (pós-v1.4) — 10 abertas + #59 (registrada/adiada)
 
 Conforme roadmap reformulado, dívidas restantes estão alocadas para
 Sessões 8-14:
 
 | # | Descrição curta | Sessão alvo |
 |---|---|---|
-| #45 | Transcribe checkpoint | 8 (v1.4-efficient-classify) |
-| #46 | Classify cache + dedup + batch | 8 |
 | #47 | Vision filtro cascata | 9 (v1.5-efficient-vision) |
 | #48 | Frames de vídeo | 9 |
 | #49 | OCR roteamento | 9 |
@@ -702,13 +747,15 @@ Sessões 8-14:
 | #56 | Refactor obra↔canal (BREAKING) | 12 (v2.0-alpha-multi-canal) |
 | #57 | Cross-channel + ledger consolidado | 13 (v2.1-consolidator) |
 | #58 | Framework plugável de outputs | 14 (v2.2-modular-outputs) |
+| #59 | Upgrade Jaccard → sentence-transformers (sob trigger) | quando trigger ativar (não programada) |
 
-> **Total fechadas:** 38 (anteriores + #41, #42, #55 + ADR-006 desta
-> sprint).
-> **Total abertas:** 11.
-> **ADRs ativos:** ADR-007 (state machine wrapper — aceito).
-> **ADRs resolvidos nesta sprint:** ADR-006 (events table — REMOVE
-> executado).
+> **Total fechadas:** 40 (anteriores + #45, #46 desta sprint).
+> **Total abertas:** 10 + #59 (registrada com triggers, adiada
+> conscientemente).
+> **ADRs ativos:** ADR-007 (state machine wrapper — aceito);
+> ADR-008 (classify 3-tier — aceito).
+> **ADRs resolvidos em sprints anteriores:** ADR-006 (events table —
+> REMOVE executado em v1.3).
 
 ---
 
@@ -749,7 +796,7 @@ Se futuro exigir semântica sofisticada, fica **Fase B.2** com fallback Claude �
 
 ---
 
-## 11. Métricas Atuais (v1.3, verificadas 25/04/2026)
+## 11. Métricas Atuais (v1.4, verificadas 25/04/2026)
 
 ```
 Corpus EVERALDO_SANTAQUITERIA (vault piloto):
@@ -764,19 +811,20 @@ correlations:        29 (9 com confidence ≥ 0.70 + 1 CONTRACT_RENEGOTIATION)
 events:              0 (tabela existe no schema; ver ADR-006 sobre status)
 
 Código:
-Commits totais:      ~100+
-Tags publicadas:     16 versões + 12 safety checkpoints
-Testes passando:     738 (após Sessão 7 — safe-ingestion +40 novos)
-Arquivos Python:     ~65+
-Linhas de código:    ~10.500+
+Commits totais:      ~105+
+Tags publicadas:     17 versões + 13 safety checkpoints
+Testes passando:     791 (após Sessão 8 — efficient-classify +53 novos)
+Arquivos Python:     ~70+
+Linhas de código:    ~11.500+
 
-Custos acumulados até v1.3:
+Custos acumulados até v1.4:
 Desenvolvimento:     ~US$ 2.00
 Geração narrativas:  ~US$ 0.85 (Sessão 2 adversarial)
 Sessão 5 empírica:   ~US$ 0.31 (1 narrate API call em EVERALDO)
 Higiene + cleanup:   US$ 0.00 (puro código + docs)
 Sessão 6 (resiliência): US$ 0.00 (puro código + validação local)
 Sessão 7 (ingestion):   US$ 0.00 (puro código + validação local)
+Sessão 8 (efficient):   US$ 0.00 (puro código + mocks)
 Total:               ~US$ 3.16 (≈ R$ 16)
 ```
 
