@@ -58,17 +58,26 @@ def _count_unique_matches(text: str) -> int:
 
 def detect_temporal_payment_context(
     conn: sqlite3.Connection, obra: str,
+    *, window: timedelta | None = None,
 ) -> list[Correlation]:
     """
     Emite correlacoes TEMPORAL_PAYMENT_CONTEXT para a obra inteira.
 
     Uma correlacao por par (financial_record, classification) onde:
-      - classification.timestamp esta em [fr.ts - 30min, fr.ts + 30min]
+      - classification.timestamp esta em [fr.ts - WINDOW, fr.ts + WINDOW]
+        (default WINDOW=30min; configuravel via param ``window``)
       - texto da classification contem >=1 PAYMENT_KEYWORDS
 
     Financial_records sem timestamp sao ignorados (data_transacao OU
     hora_transacao null). Classifications sem timestamp sao ignoradas.
+
+    Args:
+        window: override do WINDOW default (30min). Permite calibrar
+            por corpus/contexto. Sessao 10 (#50): expoe parametro
+            sem mudar default, integra com parallel_detect_correlations.
     """
+    effective_window = window if window is not None else WINDOW
+
     frs = [fe for fe in fetch_financial_timestamps(conn, obra)
            if fe.timestamp is not None]
     events = [e for e in fetch_event_texts(conn, obra)
@@ -76,10 +85,11 @@ def detect_temporal_payment_context(
     if not frs or not events:
         return []
 
+    window_label = _format_window_label(effective_window)
     out: list[Correlation] = []
     for fr in frs:
-        lo = fr.timestamp - WINDOW
-        hi = fr.timestamp + WINDOW
+        lo = fr.timestamp - effective_window
+        hi = fr.timestamp + effective_window
         for ev in events:
             if ev.timestamp < lo or ev.timestamp > hi:
                 continue
@@ -99,11 +109,24 @@ def detect_temporal_payment_context(
                 confidence=confidence,
                 rationale=(
                     f"{matches} keyword(s) de pagamento na janela "
-                    f"+-30min (delta={delta:+d}s)"
+                    f"+-{window_label} (delta={delta:+d}s)"
                 ),
                 detected_by=DETECTOR_ID,
             ))
     return out
+
+
+def _format_window_label(window: timedelta) -> str:
+    """Formato compacto para rationale (30min, 3d, 48h, etc)."""
+    total_sec = int(window.total_seconds())
+    days = total_sec // 86400
+    if days >= 1 and total_sec % 86400 == 0:
+        return f"{days}d"
+    hours = total_sec // 3600
+    if hours >= 1 and total_sec % 3600 == 0:
+        return f"{hours}h"
+    minutes = total_sec // 60
+    return f"{minutes}min"
 
 
 __all__ = [

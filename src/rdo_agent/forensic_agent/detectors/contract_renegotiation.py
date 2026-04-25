@@ -131,6 +131,7 @@ def _format_brl(cents: int) -> str:
 
 def detect_contract_renegotiation(
     conn: sqlite3.Connection, obra: str,
+    *, window: timedelta | None = None,
 ) -> list[Correlation]:
     """
     Emite correlações ``CONTRACT_RENEGOTIATION`` para a obra inteira.
@@ -138,8 +139,15 @@ def detect_contract_renegotiation(
     Implementação O(n²) sobre os classifications com valor mencionado.
     Em corpus piloto (EVERALDO ~250 classifications, ~10-20 com valor)
     isso é trivial. Para corpus maior considerar pré-filtragem por
-    janela temporal (Sessão 6 / consolidador).
+    janela temporal mais restrita.
+
+    Args:
+        window: override do WINDOW default (30 dias). Sessao 10 (#50).
+            Renegociacao tipica acontece em janela curta — janela menor
+            reduz pares falsos positivos.
     """
+    effective_window = window if window is not None else WINDOW
+
     events = [e for e in fetch_event_texts(conn, obra)
               if e.timestamp is not None]
     if not events:
@@ -175,7 +183,7 @@ def detect_contract_renegotiation(
                 second_ev, second_v, second_stems = ev_b, v_b, stems_b
 
             delta = second_ev.timestamp - first_ev.timestamp
-            if delta > WINDOW:
+            if delta > effective_window:
                 continue
 
             # Variação relativa: ambos > 0 garantido pelo extrator

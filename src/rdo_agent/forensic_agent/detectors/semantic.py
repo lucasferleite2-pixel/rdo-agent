@@ -209,14 +209,22 @@ def tokenize(text: str) -> set[str]:
 
 def detect_semantic_payment_scope(
     conn: sqlite3.Connection, obra: str,
+    *, window: timedelta | None = None,
 ) -> list[Correlation]:
     """
     Emite SEMANTIC_PAYMENT_SCOPE para a obra inteira.
 
     Para cada financial_record com descricao e timestamp (precisa da
-    data pra janela +-3d), compara conjunto-de-termos com classifications
+    data pra janela +-window), compara conjunto-de-termos com classifications
     do periodo. Overlap >=2 => emite Correlation.
+
+    Args:
+        window: override do WINDOW default (3 dias). Sessao 10 (#50).
+            time_decay (linear de 1.0 → TIME_DECAY_FLOOR=0.7) escala
+            com a janela escolhida.
     """
+    effective_window = window if window is not None else WINDOW
+
     frs = [fe for fe in fetch_financial_timestamps(conn, obra)
            if fe.timestamp is not None and (fe.descricao or "").strip()]
     if not frs:
@@ -231,15 +239,15 @@ def detect_semantic_payment_scope(
         (i, tokenize(ev.text)) for i, ev in enumerate(events)
     ]
 
-    window_seconds = int(WINDOW.total_seconds())
+    window_seconds = int(effective_window.total_seconds())
     out: list[Correlation] = []
     for fr in frs:
         fr_tokens = tokenize(fr.descricao or "")
         if len(fr_tokens) < MIN_OVERLAP:
             # descricao com <2 termos uteis: impossivel overlap >=2
             continue
-        lo = fr.timestamp - WINDOW
-        hi = fr.timestamp + WINDOW
+        lo = fr.timestamp - effective_window
+        hi = fr.timestamp + effective_window
         for idx, cls_tokens in event_tokens:
             ev = events[idx]
             if ev.timestamp < lo or ev.timestamp > hi:

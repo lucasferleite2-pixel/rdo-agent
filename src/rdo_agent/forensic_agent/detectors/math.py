@@ -205,6 +205,7 @@ def _classify_match(
 
 def detect_math_relations(
     conn: sqlite3.Connection, obra: str,
+    *, window: timedelta | None = None,
 ) -> list[Correlation]:
     """
     Emite MATH_VALUE_MATCH / MATH_INSTALLMENT_MATCH / MATH_VALUE_DIVERGENCE.
@@ -213,7 +214,12 @@ def detect_math_relations(
     classification batam — cada par vira uma linha).
 
     Financial_records sem valor_centavos ou timestamp sao ignorados.
+
+    Args:
+        window: override do WINDOW default (48h). Sessao 10 (#50).
     """
+    effective_window = window if window is not None else WINDOW
+
     frs = [fe for fe in fetch_financial_timestamps(conn, obra)
            if fe.valor_centavos is not None and fe.valor_centavos > 0
            and fe.timestamp is not None]
@@ -240,8 +246,8 @@ def detect_math_relations(
 
     out: list[Correlation] = []
     for fr in frs:
-        lo = fr.timestamp - WINDOW
-        hi = fr.timestamp + WINDOW
+        lo = fr.timestamp - effective_window
+        hi = fr.timestamp + effective_window
         target = fr.valor_centavos
         assert target is not None  # garantido pelo filtro acima
         for idx, mentions in event_mentions:
