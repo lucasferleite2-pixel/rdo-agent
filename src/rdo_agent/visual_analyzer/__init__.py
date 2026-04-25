@@ -704,6 +704,234 @@ def visual_analysis_handler(task: Task, conn: sqlite3.Connection) -> str | None:
     return json_file_id
 
 
+def process_visual_pending(
+    conn: sqlite3.Connection,
+    obra: str,
+    *,
+    max_images: int | None = None,
+    enable_cascade: bool = True,
+    on_skip=None,
+    on_done=None,
+    on_fail=None,
+) -> dict[str, int]:
+    """
+    Drena tasks ``VISUAL_ANALYSIS`` aplicando cascade S9 (#47) antes
+    de chamar Vision API.
+
+    Cascade (em ordem crescente de custo):
+
+    1. **Heurística** (``HeuristicImageFilter``): tamanho, dimensões,
+       blur, corruption. Skip = sentinel "filtered_heuristic".
+    2. **pHash dedup** (``PerceptualHashDedup``): se imagem já tem
+       análise registrada, reusa via copy-pointer.
+    3. **Routing** (``RoutingClassifier``): financial/document são
+       enviadas para OCR especializado em vez de Vision.
+
+    Sobreviventes vão para ``analyze_image()`` + persistência idêntica
+    a ``visual_analysis_handler``.
+
+    Integra com:
+    - ``PipelineStateManager`` (claim/complete/fail atômicos);
+    - ``StructuredLogger`` (stage_start/done/failed/cost_event);
+    - ``CostQuota`` (bloqueia se custo Vision acumulado > quota);
+    - ``CircuitBreaker`` ``openai_vision``.
+
+    Args:
+        conn: SQLite com tasks/files já populados.
+        obra: identificador do canal/corpus.
+        max_images: ``None`` = drenar tudo.
+        enable_cascade: ``False`` desativa pre-filtro (debug/A-B test).
+        on_skip / on_done / on_fail: callbacks ``(file_id, ctx)``.
+
+    Returns:
+        dict com ``processed`` / ``filtered_heuristic`` / ``deduped`` /
+        ``routed_ocr`` / ``failed`` counts.
+    """
+    from rdo_agent.observability import (
+        CircuitOpenError,
+        CostQuota,
+        QuotaExceededError,
+        StructuredLogger,
+    )
+    from rdo_agent.observability.resilience import get_openai_vision_circuit
+    from rdo_agent.orchestrator import TaskType
+    from rdo_agent.pipeline_state import PipelineStateManager
+    from rdo_agent.visual_analyzer.cascade import (
+        HeuristicImageFilter,
+        PerceptualHashDedup,
+        RoutingClassifier,
+    )
+
+    state = PipelineStateManager(conn)
+    logger = StructuredLogger(obra)
+    quota = CostQuota(corpus_id=obra)
+    breaker = get_openai_vision_circuit()
+
+    heuristic = HeuristicImageFilter() if enable_cascade else None
+    phash_dedup = PerceptualHashDedup(conn) if enable_cascade else None
+    routing = RoutingClassifier() if enable_cascade else None
+
+    counts = {
+        "processed": 0,
+        "filtered_heuristic": 0,
+        "deduped": 0,
+        "routed_ocr": 0,
+        "failed": 0,
+    }
+    cumulative_cost_usd = 0.0
+    vault_path = config.get().vault_path(obra)
+
+    while True:
+        total_seen = sum(counts.values())
+        if max_images is not None and total_seen >= max_images:
+            break
+
+        task = state.claim(obra, task_type=TaskType.VISUAL_ANALYSIS)
+        if task is None:
+            break
+
+        file_id = task.payload.get("file_id", "")
+        rel_path = task.payload.get("file_path", "")
+        image_path = vault_path / rel_path
+
+        # ---- Camada 1: heurística ----
+        if heuristic is not None:
+            verdict = heuristic.evaluate(image_path)
+            if verdict.skip:
+                state.complete(
+                    task.id,
+                    result_ref=f"filtered_heuristic:{verdict.reason}",
+                )
+                logger.emit(
+                    "visual_filtered_heuristic",
+                    file_id=file_id, reason=verdict.reason,
+                )
+                counts["filtered_heuristic"] += 1
+                if on_skip:
+                    on_skip(file_id, {"layer": "heuristic", "reason": verdict.reason})
+                continue
+
+        # ---- Camada 2: pHash dedup ----
+        if phash_dedup is not None:
+            try:
+                phash = phash_dedup.compute_phash(image_path)
+            except Exception as e:
+                phash = None
+                logger.emit(
+                    "phash_compute_failed", file_id=file_id, error=str(e),
+                )
+            if phash:
+                dup = phash_dedup.find_duplicate(
+                    obra, phash, exclude_file_id=file_id,
+                )
+                if dup is not None:
+                    dup_file_id, dup_va_id = dup
+                    state.complete(
+                        task.id,
+                        result_ref=f"deduped:phash:{dup_file_id}",
+                    )
+                    phash_dedup.register(
+                        obra, file_id, phash,
+                        visual_analysis_id=dup_va_id,
+                    )
+                    logger.emit(
+                        "visual_deduped_phash",
+                        file_id=file_id, dup_file_id=dup_file_id,
+                    )
+                    counts["deduped"] += 1
+                    if on_skip:
+                        on_skip(file_id, {"layer": "phash", "dup_of": dup_file_id})
+                    continue
+
+        # ---- Camada 3: routing ----
+        if routing is not None:
+            decision = routing.classify(image_path)
+            if decision.target in ("financial", "document"):
+                state.complete(
+                    task.id,
+                    result_ref=f"routed_ocr:{decision.target}:{decision.reason}",
+                )
+                logger.emit(
+                    "visual_routed_ocr",
+                    file_id=file_id, target=decision.target,
+                    reason=decision.reason,
+                )
+                counts["routed_ocr"] += 1
+                if on_skip:
+                    on_skip(file_id, {"layer": "routing", "target": decision.target})
+                continue
+
+        # ---- Survivor: chama Vision via handler ----
+        try:
+            quota.check_or_raise(cumulative_cost_usd)
+        except QuotaExceededError as e:
+            state.fail(task.id, f"quota: {e}")
+            logger.stage_failed(
+                "visual", file_id, "quota_exceeded", str(e),
+            )
+            counts["failed"] += 1
+            if on_fail:
+                on_fail(file_id, {"error": "quota_exceeded"})
+            break
+
+        logger.stage_start("visual", file_id)
+        t0 = time.time()
+        try:
+            result_ref = breaker.call(visual_analysis_handler, task, conn)
+        except CircuitOpenError as e:
+            state.fail(task.id, f"circuit: {e}")
+            logger.stage_failed(
+                "visual", file_id, "circuit_open", str(e),
+            )
+            counts["failed"] += 1
+            if on_fail:
+                on_fail(file_id, {"error": "circuit_open"})
+            break
+        except Exception as e:
+            duration_ms = int((time.time() - t0) * 1000)
+            error_type = _classify_error_type(e)
+            state.fail(task.id, str(e))
+            logger.stage_failed(
+                "visual", file_id, error_type, str(e),
+                duration_ms=duration_ms,
+            )
+            counts["failed"] += 1
+            if on_fail:
+                on_fail(file_id, {"error_type": error_type, "error": str(e)})
+            continue
+
+        duration_ms = int((time.time() - t0) * 1000)
+        last = conn.execute(
+            "SELECT cost_usd FROM api_calls "
+            "WHERE obra = ? AND endpoint = 'chat.completions' "
+            "ORDER BY id DESC LIMIT 1",
+            (obra,),
+        ).fetchone()
+        cost_usd = float(last[0] or 0.0) if last is not None else 0.0
+        cumulative_cost_usd += cost_usd
+
+        # Registra phash do survivor (Camada 2 dedup futuro)
+        if phash_dedup is not None:
+            try:
+                phash = phash_dedup.compute_phash(image_path)
+                phash_dedup.register(obra, file_id, phash)
+            except Exception:
+                pass
+
+        state.complete(task.id, result_ref=result_ref)
+        logger.cost_event(
+            api="openai", model=MODEL,
+            tokens_in=0, tokens_out=0, cost_usd=cost_usd,
+            stage="visual", file_id=file_id,
+        )
+        logger.stage_done("visual", file_id, duration_ms)
+        counts["processed"] += 1
+        if on_done:
+            on_done(file_id, {"cost_usd": cost_usd, "duration_ms": duration_ms})
+
+    return counts
+
+
 __all__ = [
     "MODEL",
     "PRICING_USD_PER_TOKEN",
@@ -711,5 +939,6 @@ __all__ = [
     "RESPONSE_FORMAT",
     "TEMPERATURE",
     "analyze_image",
+    "process_visual_pending",
     "visual_analysis_handler",
 ]

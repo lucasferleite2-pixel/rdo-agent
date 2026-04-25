@@ -1764,6 +1764,73 @@ def transcribe_pending_cmd(
         sys.exit(1)
 
 
+@main.command(name="process-visual")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option(
+    "--max", "max_images", type=int, default=None,
+    help="Máximo de imagens a processar (default: todas)",
+)
+@click.option(
+    "--no-cascade", is_flag=True, default=False,
+    help="Desliga cascade S9 (heurística + pHash + routing). Debug only.",
+)
+def process_visual_cmd(
+    obra: str, max_images: int | None, no_cascade: bool,
+) -> None:
+    """
+    Drena tasks VISUAL_ANALYSIS via cascade S9 + Vision API (#47).
+
+    Cascade aplicado antes da API:
+    1. HeuristicImageFilter — skipa stickers/blur/corruption ($0)
+    2. PerceptualHashDedup — reusa análise de imagem visualmente igual ($0)
+    3. RoutingClassifier — routes financial/document para OCR ($0)
+    4. Vision API — só sobreviventes pagam
+
+    Integra PipelineStateManager + StructuredLogger + CostQuota +
+    CircuitBreaker openai_vision.
+    """
+    from rdo_agent.orchestrator import init_db
+    from rdo_agent.visual_analyzer import process_visual_pending
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = init_db(vault_path)
+    console.print(f"[bold cyan]Process-visual:[/bold cyan] {obra}")
+    if max_images:
+        console.print(f"[bold cyan]Max:[/bold cyan] {max_images}")
+    if no_cascade:
+        console.print("[yellow]Cascade DESLIGADO — todas as imagens vão para Vision[/yellow]")
+
+    try:
+        counts = process_visual_pending(
+            conn, obra,
+            max_images=max_images,
+            enable_cascade=not no_cascade,
+        )
+    finally:
+        conn.close()
+
+    summary = Table(title="Resumo process-visual", show_header=False)
+    summary.add_column("metrica", style="cyan", no_wrap=True)
+    summary.add_column("valor", style="bold")
+    summary.add_row("processed (Vision)", f"[green]{counts['processed']}[/green]")
+    summary.add_row("filtered_heuristic", f"[dim]{counts['filtered_heuristic']}[/dim]")
+    summary.add_row("deduped (pHash)", f"[dim]{counts['deduped']}[/dim]")
+    summary.add_row("routed_ocr", f"[dim]{counts['routed_ocr']}[/dim]")
+    summary.add_row(
+        "failed",
+        f"[red]{counts['failed']}[/red]" if counts["failed"] else "0",
+    )
+    console.print("")
+    console.print(summary)
+    if counts["failed"] > 0:
+        sys.exit(1)
+
+
 @main.command(name="process-videos")
 @click.option("--obra", required=True, help="Identificador da obra")
 @click.option(
