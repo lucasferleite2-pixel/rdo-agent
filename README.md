@@ -160,11 +160,14 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.0.2-docs-sync`
+### Estado atual: `v1.0.3-cleanup`
 
-Última release de produto: `v1.0.1-markdown-fix` (24/04/2026).
-A `v1.0.2` é uma sprint de higiene puramente documental (sem mudança
-de comportamento) que alinhou docs com o estado real do código.
+Última release de produto: `v1.0.3-cleanup` (25/04/2026).
+A `v1.0.2` foi sprint de higiene documental (sem mudança de
+comportamento). A `v1.0.3` fechou 7 dívidas cosméticas/menores
+(rename de seção do RDO, deps WeasyPrint documentadas, smart_truncate
++ strip_emoji utilities, CSS Vestígio para tabelas/code/blockquote,
+pyMuPDF para validação de PDFs, threshold adversarial no validator).
 
 Para roadmap completo e estado das sprints, ver:
 

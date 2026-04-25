@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rdo-agent"
-version = "1.0.2"
+version = "1.0.3"
 description = "Agente Forense de RDO — Sistema multi-agente para geração de Relatórios Diários de Obra"
 readme = "README.md"
 requires-python = ">=3.11"
