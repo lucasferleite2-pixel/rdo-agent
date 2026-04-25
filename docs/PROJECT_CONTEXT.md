@@ -542,23 +542,45 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 - ~~#29~~: Prompt com regra de ancoragem de correlações
 - ~~#30~~: Overview inclui `correlations_sample_weak`
 
-### 9.4 Resolvidas em Sessão 3 (v1.0)
+### 9.4 Resolvidas em Sessão 3 (v1.0) — workaround pragmático
 
 - ~~#35~~: tabela `events` vazia — adapter implementou fallback usando
-  `financial_records` + top classifications
+  `financial_records` + top classifications. **Reaberto formalmente em
+  ADR-006** (25/04): a "resolução" foi um workaround pragmático, não
+  arquitetural. Decisão de fundo (popular `events` ou removê-la do
+  schema) foi adiada conscientemente para a Sessão 5 (Consolidador
+  multi-canal), quando virá demanda concreta. Ver
+  `docs/ADR-006-tabela-events-status.md`.
 
-### 9.5 Pendentes (pós-v1.0)
+### 9.5 Resolvidas em Sessão 3.8 (v1.0.1)
 
-- **#13**: Rename "Pagamentos" → "Discussões financeiras" no RDO (cosmética)
-- **#16**: Streaming no narrator (solução arquitetural vs fix de timeout)
-- **#27**: Detector futuro CONTRACT_RENEGOTIATION
-- **#31**: Validator `MAX_BODY_CHARS` — considerar tiers (critical vs informational)
-- **#32**: MAX_TOKENS dinâmico por scope (overview precisa de mais que day)
-- **#33**: Warning file_ids 50% em overview adversarial — diretriz pode conflitar
-- **#34**: WeasyPrint em Linux mínimo exige libpango/libcairo — documentar no README
-- **#36**: Narrativa V4 pode exceder 40k chars e estressar layout PDF — considerar truncamento inteligente por parágrafo
-- **#37**: Extractor de texto do PDF (pdfplumber) quebra section-marks — usar pyMuPDF ou regex tolerante em testes de validação
-- **#38**: ~~Markdown `##` em `## Sumário Executivo` renderiza literal no corpo do laudo~~ — **FECHADA na Fase 3.8** (tag v1.0.1-markdown-fix). Adapter converte markdown→HTML via `_markdown_to_html` / `_markdown_inline`; template usa `| safe`. ADR-004.
+- ~~#38~~: Markdown `##` em `## Sumário Executivo` renderizava literal
+  no corpo do laudo — **FECHADA**. Adapter converte markdown→HTML via
+  `_markdown_to_html` / `_markdown_inline`; template usa `| safe`.
+  Defense-in-depth XSS via `html.escape` antes do markdown. Ver
+  `docs/ADR-004-markdown-rendering-laudo.md` e
+  `docs/sessions/SESSION_LOG_SESSAO_3_8_MARKDOWN_FIX.md`.
+
+### 9.6 Pendentes (pós-v1.0.1) — 11 abertas
+
+| # | Descrição | Tipo | Sugestão de bucket |
+|---|---|---|---|
+| #13 | Rename "Pagamentos" → "Discussões financeiras" no RDO | cosmético | bundle com Sessão 4 (UI Web) |
+| #16 | Streaming no narrator (vs fix de timeout) | arquitetural | Sessão 6+ (consolidador exige) |
+| #27 | Detector futuro CONTRACT_RENEGOTIATION | feature | quando 2º caso for ingerido |
+| #31 | Validator MAX_BODY_CHARS — segmentar em tiers (critical vs informational) | refactor | bundle com Sessão 4 ou 5 |
+| #32 | MAX_TOKENS dinâmico por scope (overview > day) | arquitetural | bundle com #16 |
+| #33 | Warning file_ids 50% conflita com overview adversarial | bug menor | quando regenerar narrativas |
+| #34 | WeasyPrint Linux mínimo: libpango/libcairo — README | docs | atendido parcialmente em README v1.0 |
+| #36 | Narrativa V4 pode exceder 40k chars e estressar layout PDF | resiliência | só ataca se aparecer em produção |
+| #37 | pdfplumber quebra section-marks — usar pyMuPDF na validação | testing | bundle com #36 |
+| #39 | Tabelas longas / code blocks markdown sem CSS Vestígio | cosmético | só se aparecer em produção |
+| #40 | Narrativa V4 pode usar emoji ocasional (proibido brandbook) | qualidade | strip/warning no adapter |
+
+> **Total fechadas:** 19 (#6, #9, #10, #11, #12, #14, #15, #19, #20,
+> #22, #23, #24, #25, #26, #28, #29, #30, #35-workaround, #38).
+> **Total abertas:** 11.
+> **Documentadas em ADR:** #35 → ADR-006; #38 → ADR-004.
 
 ---
 
