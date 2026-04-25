@@ -106,7 +106,10 @@ MEDIA_ARQUIVO_ANEXADO_RE = re.compile(r"^(.+?\.\w+)\s+\(arquivo anexado\)$")
 
 def parse_chat_file(txt_path: Path) -> list[ParsedMessage]:
     """
-    Parse completo de um _chat.txt do WhatsApp.
+    Parse completo de um _chat.txt do WhatsApp (eager).
+
+    Wrapper sobre :func:`iter_chat_messages` para callers que querem a
+    lista pronta. Para arquivos grandes (>100 MB), prefira o iterador.
 
     Args:
         txt_path: caminho do arquivo .txt
@@ -118,41 +121,75 @@ def parse_chat_file(txt_path: Path) -> list[ParsedMessage]:
         FileNotFoundError: se o arquivo não existir.
         ValueError: se a primeira linha de dados não casar com nenhum formato conhecido.
     """
-    text = _read_text(txt_path)
-    lines = text.splitlines()
+    return list(iter_chat_messages(txt_path))
 
-    fmt = _detect_format_from_lines(lines)
+
+def iter_chat_messages(txt_path: Path):
+    """
+    Versão streaming de :func:`parse_chat_file` (Sessão 7 / #41).
+
+    Lê o arquivo linha-a-linha e yielda :class:`ParsedMessage` à
+    medida que cada mensagem é finalizada. RAM peak fica bounded
+    pelo tamanho da maior mensagem individual (raramente >50KB),
+    independente do tamanho total do .txt.
+
+    Premissa de formato: o WhatsApp não mistura ``dash`` e
+    ``bracket`` no mesmo export. Detecção é feita pela primeira
+    linha que casa com algum header — em arquivo grande, o read-once
+    necessário para detectar formato fica em janela curta.
+
+    Yields:
+        ParsedMessage em ordem de leitura.
+    """
+    encoding = _detect_encoding(txt_path)
+
+    # Primeira passagem para detectar formato. Lemos linhas até que uma
+    # case com algum header (geralmente a primeira linha não-vazia).
+    fmt: str | None = None
+    detection_buffer: list[str] = []
+    with txt_path.open("r", encoding=encoding) as f:
+        for raw in f:
+            line = raw.rstrip("\n").replace(LRM, "")
+            detection_buffer.append(line)
+            if line.strip():
+                fmt = _detect_format_from_lines([line])
+                if fmt is not None:
+                    break
+
     if fmt is None:
-        return []
+        return  # arquivo vazio ou sem formato reconhecido
     header_re = DASH_HEADER_RE if fmt == "dash" else BRACKET_HEADER_RE
 
-    messages: list[ParsedMessage] = []
+    # Segunda passagem real, já com formato fixado. Reabrimos o arquivo
+    # para garantir streaming verdadeiro (não acumulamos detection_buffer
+    # — ele é pequeno por construção mas reler do começo é semanticamente
+    # mais limpo e tem custo desprezível: 1 abertura extra).
     current: ParsedMessage | None = None
-
-    for i, line in enumerate(lines, start=1):
-        m = header_re.match(line)
-        if m:
-            if current is not None:
-                _finalize(current)
-                messages.append(current)
-            date_str, time_str, sender, content = m.group(1), m.group(2), m.group(3), m.group(4)
-            current = ParsedMessage(
-                line_number=i,
-                timestamp_raw=f"{date_str} {time_str}",
-                timestamp=_parse_timestamp(date_str, time_str),
-                sender=sender.strip() if sender else None,
-                content=content,
-                message_type=MessageType.TEXT,
-            )
-        elif current is not None:
-            current.content += "\n" + line
-        # linha órfã antes da primeira mensagem é ignorada silenciosamente
-
+    with txt_path.open("r", encoding=encoding) as f:
+        for i, raw in enumerate(f, start=1):
+            line = raw.rstrip("\n").replace(LRM, "")
+            m = header_re.match(line)
+            if m:
+                if current is not None:
+                    _finalize(current)
+                    yield current
+                date_str, time_str, sender, content = (
+                    m.group(1), m.group(2), m.group(3), m.group(4),
+                )
+                current = ParsedMessage(
+                    line_number=i,
+                    timestamp_raw=f"{date_str} {time_str}",
+                    timestamp=_parse_timestamp(date_str, time_str),
+                    sender=sender.strip() if sender else None,
+                    content=content,
+                    message_type=MessageType.TEXT,
+                )
+            elif current is not None:
+                current.content += "\n" + line
+            # linha órfã antes da primeira mensagem é ignorada
     if current is not None:
         _finalize(current)
-        messages.append(current)
-
-    return messages
+        yield current
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +213,23 @@ def _read_text(txt_path: Path) -> str:
         log.warning("utf-8 falhou em %s; usando latin-1", txt_path)
         text = txt_path.read_text(encoding="latin-1")
     return text.replace(LRM, "")
+
+
+def _detect_encoding(txt_path: Path) -> str:
+    """
+    Detecta encoding probando primeiro utf-8 (default WhatsApp), com
+    fallback para latin-1 (exports antigos pt-BR no Android pré-2018).
+
+    Probe lê apenas os primeiros ~64KB — o suficiente pra detectar
+    UnicodeDecodeError sem materializar arquivo de GBs em RAM.
+    """
+    try:
+        with txt_path.open("r", encoding="utf-8") as f:
+            f.read(65536)
+        return "utf-8"
+    except UnicodeDecodeError:
+        log.warning("utf-8 falhou em %s; usando latin-1", txt_path)
+        return "latin-1"
 
 
 def _detect_format_from_lines(lines: list[str]) -> str | None:

@@ -389,6 +389,92 @@ def _write_messages_to_db(
     return inserted, skipped
 
 
+def write_messages_streaming(
+    conn,
+    messages_iter,
+    obra: str,
+    *,
+    batch_size: int = 100,
+    progress_callback=None,
+) -> tuple[int, int]:
+    """
+    Versão streaming de :func:`_write_messages_to_db` (Sessão 7 / #41).
+
+    Consome um iterador de :class:`ParsedMessage` e insere em batches
+    de ``batch_size`` para limitar RAM peak. Mantém o mesmo contrato
+    de dedup duplo (message_id determinístico + content_hash UNIQUE
+    com INSERT OR IGNORE).
+
+    Args:
+        conn: conexão SQLite.
+        messages_iter: iterável de ParsedMessage (ex:
+            ``parser.iter_chat_messages(path)``).
+        obra: identificador da obra.
+        batch_size: quantas mensagens por flush. 100 é equilíbrio
+            entre RAM e overhead de transação.
+        progress_callback: opcional. Chamada após cada batch com
+            ``(batch_inserted, batch_skipped, total_processed)``.
+            Use para integrar com ``StructuredLogger.emit("ingest_batch_done", ...)``.
+
+    Returns:
+        ``(total_inserted, total_skipped)`` somando todos os batches.
+    """
+    from rdo_agent.orchestrator import compute_message_content_hash
+
+    now = _now_iso_utc()
+    batch_rows: list[tuple] = []
+    total_inserted = 0
+    total_skipped = 0
+    total_processed = 0
+
+    def _flush() -> None:
+        nonlocal total_inserted, total_skipped
+        if not batch_rows:
+            return
+        cur = conn.executemany(
+            """
+            INSERT OR IGNORE INTO messages (
+                message_id, obra, timestamp_whatsapp, sender, content,
+                media_ref, is_deleted, is_edited, is_sticker, raw_line,
+                created_at, content_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            batch_rows,
+        )
+        ins = cur.rowcount or 0
+        skp = len(batch_rows) - ins
+        total_inserted += ins
+        total_skipped += skp
+        if progress_callback is not None:
+            progress_callback(ins, skp, total_processed)
+        batch_rows.clear()
+        conn.commit()
+
+    for m in messages_iter:
+        batch_rows.append((
+            _message_id(obra, m.line_number),
+            obra,
+            m.timestamp.isoformat(),
+            m.sender,
+            m.content,
+            m.media_filename,
+            int(m.message_type == MessageType.DELETED),
+            int(m.edited),
+            int(m.message_type == MessageType.STICKER),
+            m.timestamp_raw,
+            now,
+            compute_message_content_hash(
+                m.timestamp.isoformat(), m.sender, m.content,
+            ),
+        ))
+        total_processed += 1
+        if len(batch_rows) >= batch_size:
+            _flush()
+
+    _flush()  # batch final
+    return total_inserted, total_skipped
+
+
 def _write_files_to_db(
     conn,
     files_meta: list[dict],
