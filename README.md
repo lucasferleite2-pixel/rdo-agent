@@ -158,6 +158,32 @@ reais das APIs:
 - `RDO_AGENT_RATE_LIMIT_ANTHROPIC_PER_MIN` (default `20`).
 - `RDO_AGENT_DAILY_QUOTA_USD` (default `100.0`).
 
+## Pre-flight check (v1.3+)
+
+Antes de disparar processamento pesado em ZIP grande, estime
+recursos sem extrair nada:
+
+```bash
+rdo-agent estimate --zip path/to/whatsapp-export.zip
+```
+
+Output cobre: counts (mensagens, áudios, imagens, vídeos, PDFs),
+disco necessário vs disponível, custos estimados por estágio
+(transcribe Whisper local, classify gpt-4o-mini, vision gpt-4o,
+narrator Sonnet) com bounds ±50%, tempo estimado single-machine,
+e warnings explícitos (custo > $50, disco insuficiente, chat.txt
+ausente do ZIP).
+
+Exit code `3` quando `disco insuficiente` ou `custo > $50` — útil
+em scripts CI que querem gate sem ler stdout.
+
+Rates calibradas por env vars (override de qualquer item):
+
+```bash
+RDO_AGENT_PREFLIGHT_VISION_USD_PER_IMAGE=0.01 \
+  rdo-agent estimate --zip path.zip
+```
+
 ## Pipeline state e logging (v1.2+)
 
 Wrapper sobre a tabela `tasks` (state machine do orchestrator desde
@@ -241,9 +267,9 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.2-resilient-pipeline`
+### Estado atual: `v1.3-safe-ingestion`
 
-Última release de produto: `v1.2-resilient-pipeline` (25/04/2026).
+Última release de produto: `v1.3-safe-ingestion` (25/04/2026).
 
 - `v1.0.2` (higiene documental): docs alinhados com código (sem
   mudança de comportamento).
@@ -259,6 +285,11 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
   logging JSONL estruturado em `~/.rdo-agent/logs/` com CLI `watch` /
   `stats`, primitivas de resiliência (`CircuitBreaker`, `RateLimiter`,
   `CostQuota`).
+- `v1.3` (ingestão segura): parser streaming `iter_chat_messages`
+  (RAM bounded em arquivos de centenas de MB), `MediaSource` para
+  copy-on-demand de mídia (sem `extractall` up-front), pre-flight
+  check com CLI `estimate` (custo/tempo/disco antes de processar),
+  tabela `events` REMOVIDA do schema (ADR-006 resolvido).
 
 Para roadmap completo e estado das sprints, ver:
 

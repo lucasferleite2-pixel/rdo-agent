@@ -2,7 +2,7 @@
 
 > **Propósito deste documento:** servir como briefing completo pra qualquer nova conversa de IA (Claude, GPT, etc) assumir o projeto sem perda de contexto. Leia de ponta a ponta antes de tomar qualquer decisão técnica ou arquitetural.
 >
-> **Última atualização:** 25/04/2026 — versão rdo-agent v1.2-resilient-pipeline (Sessão 6: PipelineStateManager + dedup content_hash + logging JSONL + circuit breaker/rate limiter)
+> **Última atualização:** 25/04/2026 — versão rdo-agent v1.3-safe-ingestion (Sessão 7: streaming parser + MediaSource copy-on-demand + pre-flight check + ADR-006 resolvido)
 
 ---
 
@@ -447,6 +447,13 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
               messages, structured JSONL logger + watch/stats CLI,
               CircuitBreaker + RateLimiter + CostQuota. 55 testes
               novos. 698 testes total verde.
+✅ v1.3    — Ingestão segura (Sessão 7 — #41, #42, #55, ADR-006):
+              streaming parser `iter_chat_messages` + write_messages_streaming
+              (RAM bounded), `MediaSource` para copy-on-demand,
+              pre-flight check com CLI `estimate` (custo/tempo/disco),
+              tabela `events` REMOVIDA (ADR-006 resolvido — opção B).
+              40 testes novos. 738 testes total verde. Fim do GRUPO 2
+              (resiliência) do roadmap reformulado.
 
 > **Nota sobre numeração de Sessões pós-v1.0:** ver `docs/ADR-005-numeracao-sessoes-pos-v1.md`.
 > A audit detectou que o rótulo "Sessão 4" estava sendo usado em duas
@@ -653,16 +660,37 @@ nova. As dívidas pendentes (antes em 9.7) viraram seção **9.8** ou
   cross-module disponíveis para wiring futuro (não duplica retry
   per-module que já funciona em narrator/transcriber/visual_analyzer).
 
-### 9.9 Pendentes (pós-v1.2) — 11 abertas (todas do roadmap reformulado)
+### 9.9 Resolvidas em Sessão 7 (v1.3-safe-ingestion)
 
-Conforme PROJECT_CONTEXT addendum 25/04 (roadmap reformulado), as
-dívidas restantes estão alocadas para Sessões 7-13:
+3 dívidas + 1 ADR fechados:
+
+- ~~#41~~: ingestão streaming via `iter_chat_messages` (lazy
+  generator) + `write_messages_streaming` por batches — `3a575bc`.
+  RAM peak bounded pelo tamanho da maior mensagem; arquivo de
+  100-500MB não estoura. `parse_chat_file` mantido como wrapper
+  eager para callers existentes.
+- ~~#42~~: `MediaSource` (`src/rdo_agent/ingestor/media_source.py`)
+  com `open()`, `materialize()`, `hash_streaming()` — `2bfc83b`.
+  Mídias do ZIP são acessadas on-demand sem `extractall` up-front.
+  `cleanup_unused(keep=...)` permite recuperar disco depois.
+- ~~#55~~: pre-flight check em `src/rdo_agent/preflight/` + CLI
+  `rdo-agent estimate` — `6e0e772`. Estima custo/tempo/disco a
+  partir de amostra do ZIP, sem extrair. Rates configuráveis via
+  env vars `RDO_AGENT_PREFLIGHT_*`. Validado empiricamente em ZIP
+  real do EVERALDO: previu 226 mensagens (= DB real).
+- ~~ADR-006~~: tabela `events` **REMOVIDA** (opção B do ADR) —
+  `44f730a`. Investigação confirmou 0 referências em produção,
+  0 testes, 0 rows. Migration `_migrate_sessao7_drop_events_table`
+  idempotente. Adapter de laudo (que era descrito como "fallback"
+  da #35) virou implementação canônica oficial.
+
+### 9.10 Pendentes (pós-v1.3) — 11 abertas (GRUPOs 3+ do roadmap)
+
+Conforme roadmap reformulado, dívidas restantes estão alocadas para
+Sessões 8-14:
 
 | # | Descrição curta | Sessão alvo |
 |---|---|---|
-| #41 | Ingestão streaming sem RAM | 7 (v1.3-safe-ingestion) |
-| #42 | Mídia copy-on-demand | 7 |
-| #55 | Pre-flight check (custo/tempo/disco) | 7 |
 | #45 | Transcribe checkpoint | 8 (v1.4-efficient-classify) |
 | #46 | Classify cache + dedup + batch | 8 |
 | #47 | Vision filtro cascata | 9 (v1.5-efficient-vision) |
@@ -675,14 +703,12 @@ dívidas restantes estão alocadas para Sessões 7-13:
 | #57 | Cross-channel + ledger consolidado | 13 (v2.1-consolidator) |
 | #58 | Framework plugável de outputs | 14 (v2.2-modular-outputs) |
 
-Mais a decisão pendente sobre tabela `events` (ADR-006) que será
-endereçada na Sessão 7 junto com ingestão.
-
-> **Total fechadas:** 34 (anteriores + #43, #44, #53, #54 desta sprint).
-> **Total abertas:** 14 (todas mapeadas para sessões 7-14 do roadmap
-> reformulado).
-> **ADRs ativos:** ADR-006 (events table — pendente decisão Sessão 7);
-> ADR-007 (state machine wrapper — aceito).
+> **Total fechadas:** 38 (anteriores + #41, #42, #55 + ADR-006 desta
+> sprint).
+> **Total abertas:** 11.
+> **ADRs ativos:** ADR-007 (state machine wrapper — aceito).
+> **ADRs resolvidos nesta sprint:** ADR-006 (events table — REMOVE
+> executado).
 
 ---
 
@@ -723,7 +749,7 @@ Se futuro exigir semântica sofisticada, fica **Fase B.2** com fallback Claude �
 
 ---
 
-## 11. Métricas Atuais (v1.2, verificadas 25/04/2026)
+## 11. Métricas Atuais (v1.3, verificadas 25/04/2026)
 
 ```
 Corpus EVERALDO_SANTAQUITERIA (vault piloto):
@@ -738,18 +764,19 @@ correlations:        29 (9 com confidence ≥ 0.70 + 1 CONTRACT_RENEGOTIATION)
 events:              0 (tabela existe no schema; ver ADR-006 sobre status)
 
 Código:
-Commits totais:      ~95+
-Tags publicadas:     15 versões + 11 safety checkpoints
-Testes passando:     698 (após Sessão 6 — resilient-pipeline +55 novos)
-Arquivos Python:     ~60+
-Linhas de código:    ~9.300+
+Commits totais:      ~100+
+Tags publicadas:     16 versões + 12 safety checkpoints
+Testes passando:     738 (após Sessão 7 — safe-ingestion +40 novos)
+Arquivos Python:     ~65+
+Linhas de código:    ~10.500+
 
-Custos acumulados até v1.2:
+Custos acumulados até v1.3:
 Desenvolvimento:     ~US$ 2.00
 Geração narrativas:  ~US$ 0.85 (Sessão 2 adversarial)
 Sessão 5 empírica:   ~US$ 0.31 (1 narrate API call em EVERALDO)
 Higiene + cleanup:   US$ 0.00 (puro código + docs)
 Sessão 6 (resiliência): US$ 0.00 (puro código + validação local)
+Sessão 7 (ingestion):   US$ 0.00 (puro código + validação local)
 Total:               ~US$ 3.16 (≈ R$ 16)
 ```
 
