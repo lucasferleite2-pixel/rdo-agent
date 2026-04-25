@@ -650,3 +650,111 @@ p strong {
 
 .seal-ring-top { top: 5mm; }
 .seal-ring-bottom { bottom: 5mm; }
+
+/* ============================================================
+   MARKDOWN ELEMENTS NO CORPO DO LAUDO (Sessão 4 · dívida #39)
+
+   Quando narrator V4 emite tabela markdown, code block ou
+   blockquote, o adapter converte para HTML via _markdown_to_html
+   (ADR-004). As regras abaixo dão a esses elementos o estilo
+   editorial Vestígio: hairline rules em tabelas, monospace contido
+   em code, blockquote com left-border bordô.
+
+   Tokens usados (todos pré-existentes):
+   --vst-bordo, --vst-preto, --vst-grafite, --vst-paper,
+   --vst-offwhite, --vst-hairline, --vst-hairline-fraco.
+   ============================================================ */
+
+/* TABELAS — escopo .secao-body para não afetar tabelas estruturais
+   (forensic-table na página final tem suas próprias regras). */
+.secao-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 5mm;
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;
+  font-variant-numeric: tabular-nums;
+}
+
+.secao-body thead th {
+  font-family: 'Inter', sans-serif;
+  font-size: 8.5pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--vst-preto);
+  text-align: left;
+  padding: 1.6mm 3mm;
+  border-bottom: 1.4px solid var(--vst-preto);
+  background: transparent;
+}
+
+.secao-body tbody td {
+  padding: 1.6mm 3mm;
+  border-bottom: 1px solid var(--vst-hairline);
+  vertical-align: top;
+  color: var(--vst-preto);
+}
+
+.secao-body tbody tr:last-child td {
+  border-bottom: 1.2px solid var(--vst-preto);
+}
+
+/* Alinhamento direito para colunas numéricas marcadas em markdown
+   com `|---:` (renderiza style="text-align: right" via markdown lib). */
+.secao-body th[style*="text-align: right"],
+.secao-body td[style*="text-align: right"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* CODE INLINE */
+.secao-body code,
+.secao-body :not(pre) > code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5pt;
+  background: var(--vst-offwhite);
+  border: 1px solid var(--vst-hairline-fraco);
+  border-radius: 2px;
+  padding: 0.3mm 1.2mm;
+  color: var(--vst-preto);
+}
+
+/* CODE BLOCK */
+.secao-body pre {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9pt;
+  line-height: 1.5;
+  background: var(--vst-offwhite);
+  border: 1px solid var(--vst-hairline);
+  border-radius: 2px;
+  padding: 3mm 4mm;
+  margin: 3mm 0 4mm;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: var(--vst-preto);
+}
+
+.secao-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  border-radius: 0;
+}
+
+/* BLOCKQUOTE — left-border bordô fino, italic grafite */
+.secao-body blockquote {
+  margin: 3mm 0 4mm 0;
+  padding: 1mm 0 1mm 4mm;
+  border-left: 2px solid var(--vst-bordo);
+  font-style: italic;
+  color: var(--vst-grafite);
+}
+
+.secao-body blockquote p {
+  margin: 0 0 1.5mm 0;
+}
+
+.secao-body blockquote p:last-child {
+  margin-bottom: 0;
+}
