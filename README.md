@@ -107,16 +107,38 @@ rdo-agent export-laudo \
 Amostra de referência: `docs/brand/Laudo-Real-EVERALDO-v1.0.pdf`
 (50 páginas, gerada 100% a partir de dados reais do corpus piloto).
 
-### Dependências de sistema (WeasyPrint)
+### Dependências de sistema (WeasyPrint / Laudo PDF)
 
-No Ubuntu/Debian mínimo, WeasyPrint pode exigir:
+O módulo de geração de laudo PDF (Vestígio) usa WeasyPrint, que requer
+**libcairo** e **libpango** instaladas no sistema. Sem essas libs,
+`rdo-agent export-laudo` falha na inicialização.
+
+**Ubuntu / Debian / WSL2 Ubuntu:**
 
 ```bash
-sudo apt install -y libpango-1.0-0 libpangoft2-1.0-0 \
-                    libcairo2 libgdk-pixbuf-2.0-0
+sudo apt-get install -y libcairo2 libpango-1.0-0 libpangoft2-1.0-0 \
+                        libgdk-pixbuf-2.0-0
 ```
 
-(Em WSL2 Ubuntu 24.04 já vem por padrão.)
+(WSL2 Ubuntu 24.04 já vem com essas libs por padrão.)
+
+**Fedora / RHEL:**
+
+```bash
+sudo dnf install -y cairo pango gdk-pixbuf2
+```
+
+**macOS (Homebrew):**
+
+```bash
+brew install cairo pango gdk-pixbuf
+```
+
+Em ambientes minimalistas (containers Alpine, imagens Docker `python:3.12-slim`,
+etc), pode também ser necessário instalar `libffi-dev`, `shared-mime-info` e
+fonts (ex: `fonts-liberation`). Ver
+[documentação oficial do WeasyPrint](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation)
+para casos não cobertos acima.
 
 ---
 
