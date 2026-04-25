@@ -138,7 +138,11 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.0.1-markdown-fix`
+### Estado atual: `v1.0.2-docs-sync`
+
+Última release de produto: `v1.0.1-markdown-fix` (24/04/2026).
+A `v1.0.2` é uma sprint de higiene puramente documental (sem mudança
+de comportamento) que alinhou docs com o estado real do código.
 
 Para roadmap completo e estado das sprints, ver:
 
