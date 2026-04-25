@@ -1396,5 +1396,145 @@ def export_laudo(
     )
 
 
+@main.command(name="pipeline-status")
+@click.option("--obra", required=True, help="Identificador da obra (canal)")
+def pipeline_status_cmd(obra: str) -> None:
+    """
+    Estado da pipeline state machine (Sessão 6 / #44).
+
+    Wrapper sobre a tabela ``tasks`` mostrando contagem por
+    (task_type, status), totais por status e tasks resumíveis
+    (running sem finished_at — possível crash).
+    """
+    from rdo_agent.pipeline_state import PipelineStateManager
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        manager = PipelineStateManager(conn)
+        report = manager.status(obra)
+    finally:
+        conn.close()
+
+    STATUSES = ("pending", "running", "done", "failed")
+    STATUS_COLORS = ("yellow", "blue", "green", "red")
+
+    table = Table(title=f"Pipeline state — obra {obra}")
+    table.add_column("task_type", style="cyan")
+    for s, color in zip(STATUSES, STATUS_COLORS, strict=True):
+        table.add_column(s, style=color, justify="right")
+
+    if not report.counts:
+        table.add_row("(sem tasks)", "—", "—", "—", "—")
+    else:
+        for tt in sorted(report.counts):
+            cells = [
+                str(report.counts[tt].get(s, 0)) or "—"
+                for s in STATUSES
+            ]
+            table.add_row(tt, *cells)
+
+    # Linha de totais
+    total_cells = [
+        str(report.totals_by_status.get(s, 0)) for s in STATUSES
+    ]
+    table.add_section()
+    table.add_row("[bold]TOTAL[/bold]", *total_cells)
+    console.print(table)
+
+    if report.has_resumable:
+        console.print(
+            f"[yellow]! {len(report.resumable)} task(s) [running] sem "
+            "finished_at — provavel crash. Use[/yellow] "
+            "[bold]rdo-agent pipeline-reset --obra "
+            f"{obra} --target running[/bold] [yellow]para resetar.[/yellow]"
+        )
+        for t in report.resumable[:10]:
+            console.print(
+                f"  [dim]id={t.id} type={t.task_type.value} "
+                f"started_at={t.started_at}[/dim]"
+            )
+    else:
+        console.print(
+            "[green]+ nenhuma task em estado resumivel[/green]"
+        )
+
+
+@main.command(name="pipeline-reset")
+@click.option("--obra", required=True, help="Identificador da obra (canal)")
+@click.option(
+    "--target",
+    type=click.Choice(["running", "failed"], case_sensitive=False),
+    required=True,
+    help=(
+        "running: reseta tasks pos-crash (running sem finished_at -> pending). "
+        "failed: reseta tasks failed -> pending para retry."
+    ),
+)
+@click.option(
+    "--task-type",
+    default=None,
+    help=(
+        "Quando --target=failed, restringe ao tipo (ex: transcribe, "
+        "classify). Sem este filtro, reseta todas as failed."
+    ),
+)
+def pipeline_reset_cmd(obra: str, target: str, task_type: str | None) -> None:
+    """
+    Recovery manual da pipeline (Sessão 6 / #44).
+
+    --target running: cenario pos-crash. Tasks que estavam executando
+    quando o processo morreu sao devolvidas para pending para serem
+    re-claimadas no proximo run.
+
+    --target failed: retry de tasks que falharam. Util apos resolver
+    erros de API/rede transientes.
+    """
+    from rdo_agent.orchestrator import TaskType
+    from rdo_agent.pipeline_state import PipelineStateManager
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        manager = PipelineStateManager(conn)
+        if target == "running":
+            n = manager.reset_running(obra)
+            console.print(
+                f"[yellow]+ reset_running: {n} task(s) running -> pending[/yellow]"
+            )
+        else:
+            tt = None
+            if task_type is not None:
+                try:
+                    tt = TaskType(task_type)
+                except ValueError:
+                    valid = ", ".join(t.value for t in TaskType)
+                    console.print(
+                        f"[red]x task_type invalido: {task_type!r}. "
+                        f"Validos: {valid}[/red]"
+                    )
+                    sys.exit(2)
+            n = manager.reset_failed(obra, task_type=tt)
+            scope = f"task_type={tt.value}" if tt else "all"
+            console.print(
+                f"[yellow]+ reset_failed ({scope}): "
+                f"{n} task(s) failed -> pending[/yellow]"
+            )
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     main()
