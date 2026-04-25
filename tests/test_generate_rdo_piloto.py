@@ -246,12 +246,12 @@ def test_multi_category_appears_in_both_sections(db, tmp_path):
     )
     md = result["markdown_path"].read_text(encoding="utf-8")
     # Aparece em AMBAS secoes
-    pag_idx = md.index("## Pagamentos")
+    pag_idx = md.index("## Discussões financeiras")
     neg_idx = md.index("## Negociações comerciais")
     # Contagem de file_trans_01 no markdown: 2 linhas (uma por secao)
     assert md.count("file_trans_01") == 2
-    # Na secao Pagamentos eh primary -> mostra "(tambem em negociacao_comercial)"
-    # Encontra a proxima secao apos Pagamentos pra limitar a sub-string
+    # Na secao Discussões financeiras eh primary -> mostra "(tambem em negociacao_comercial)"
+    # Encontra a proxima secao apos Discussões financeiras pra limitar a sub-string
     pag_end = md.index("\n## ", pag_idx + 1)
     pag_section = md[pag_idx:pag_end]
     assert "file_trans_01" in pag_section

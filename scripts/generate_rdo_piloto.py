@@ -30,7 +30,7 @@ from pathlib import Path
 # Ordem canonica das secoes do RDO. ilegivel fica em "Notas forenses".
 CATEGORY_HEADERS: list[tuple[str, str]] = [
     ("negociacao_comercial", "Negociações comerciais"),
-    ("pagamento", "Pagamentos"),
+    ("pagamento", "Discussões financeiras"),
     ("cronograma", "Cronograma e prazos"),
     ("especificacao_tecnica", "Especificações técnicas"),
     ("solicitacao_servico", "Solicitações de serviço"),
@@ -336,13 +336,13 @@ def _render_financial_section(
     records: list[sqlite3.Row],
 ) -> list[str]:
     """
-    Renderiza seção markdown de pagamentos registrados.
+    Renderiza seção markdown de comprovantes financeiros (PIX/NF/boleto).
     Se lista vazia, retorna lista vazia (secao eh omitida pelo caller).
     """
     if not records:
         return []
     lines: list[str] = []
-    lines.append("## 💰 Pagamentos registrados (comprovantes)")
+    lines.append("## 💰 Comprovantes financeiros")
     lines.append("")
     lines.append("| Hora | Valor | Tipo | De → Para | Descrição |")
     lines.append("|---|---:|:---:|---|---|")
@@ -502,9 +502,9 @@ def render_markdown(
       - Tags de source por evento ([AUDIO]/[TEXTO]/[IMAGEM]/[VIDEO-FRAME]/[PDF])
 
     Sprint 4 Op10 extensao:
-      - financial_records: se fornecido e nao-vazio, seção "Pagamentos
-        registrados (comprovantes)" eh inserida apos o resumo com
-        ledger tabular de PIX/TED/boleto. Seção omitida se vazia.
+      - financial_records: se fornecido e nao-vazio, seção "Comprovantes
+        financeiros" eh inserida apos o resumo com ledger tabular de
+        PIX/TED/boleto. Seção omitida se vazia.
     """
     by_cat = _group_by_all_categories(rows)
     total = len(rows)

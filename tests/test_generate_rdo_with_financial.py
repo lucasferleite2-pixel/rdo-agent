@@ -1,7 +1,7 @@
 """Testes da integracao financial_records no RDO — Sprint 4 Op10.
 
 Cobrem:
-  - RDO de data com PIX inclui secao "Pagamentos registrados (comprovantes)"
+  - RDO de data com PIX inclui secao "Comprovantes financeiros"
   - RDO de data sem PIX NAO inclui a secao
   - Multi-PIX: tabela lista todos em ordem cronologica (hora_transacao)
   - Valores formatados em BRL (R$ 3.500,00, R$ 30,00)
@@ -212,7 +212,7 @@ def test_render_section_contains_header_and_table(db):
     )
     lines = rdo_piloto._render_financial_section(records)
     text = "\n".join(lines)
-    assert "## 💰 Pagamentos registrados (comprovantes)" in text
+    assert "## 💰 Comprovantes financeiros" in text
     assert "| Hora | Valor | Tipo | De → Para | Descrição |" in text
     assert "R$ 3.500,00" in text
     assert "PIX" in text
@@ -268,7 +268,7 @@ def test_rdo_with_financial_records_includes_section(db, tmp_path):
         output_dir=tmp_path / "reports",
     )
     md = result["markdown_path"].read_text(encoding="utf-8")
-    assert "## 💰 Pagamentos registrados (comprovantes)" in md
+    assert "## 💰 Comprovantes financeiros" in md
     assert "R$ 3.500,00" in md
     assert "serralheria" in md
 
@@ -282,8 +282,8 @@ def test_rdo_without_financial_records_omits_section(db, tmp_path):
         output_dir=tmp_path / "reports",
     )
     md = result["markdown_path"].read_text(encoding="utf-8")
-    assert "💰 Pagamentos registrados" not in md
-    assert "Pagamentos registrados (comprovantes)" not in md
+    assert "💰 Comprovantes financeiros" not in md
+    assert "Comprovantes financeiros" not in md
 
 
 def test_rdo_multi_pix_lists_all_in_chronological_order(db, tmp_path):
@@ -325,6 +325,6 @@ def test_rdo_financial_section_appears_after_resumo_before_categorias(
     )
     md = result["markdown_path"].read_text(encoding="utf-8")
     pos_resumo = md.index("## Resumo do dia")
-    pos_financial = md.index("## 💰 Pagamentos registrados")
+    pos_financial = md.index("## 💰 Comprovantes financeiros")
     pos_negociacoes = md.index("## Negociações comerciais")
     assert pos_resumo < pos_financial < pos_negociacoes
