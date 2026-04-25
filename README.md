@@ -104,8 +104,40 @@ rdo-agent export-laudo \
   --context docs/ground_truth/EVERALDO_SANTAQUITERIA.yml
 ```
 
-Amostra de referência: `docs/brand/Laudo-Real-EVERALDO-v1.0.pdf`
-(50 páginas, gerada 100% a partir de dados reais do corpus piloto).
+Amostra de referência: `docs/brand/Laudo-Real-EVERALDO-v1.1.pdf`
+(51 páginas, gerada 100% a partir de dados reais do corpus piloto na
+Sessão 5 com detector CONTRACT_RENEGOTIATION ativo).
+
+## Streaming na geração de narrativa (v1.1+)
+
+A flag `--stream` em `rdo-agent narrate` imprime a narrativa em tempo
+real conforme o modelo gera, melhorando a UX em sessões longas
+(overview pode levar 60–120s):
+
+```bash
+rdo-agent narrate --obra EVERALDO_SANTAQUITERIA \
+  --scope obra --skip-cache --stream
+```
+
+Persistência (DB + arquivo) só acontece após o stream completar.
+Falhas mid-stream propagam sem retry (sem semântica de recuperação
+limpa).
+
+## Variáveis de ambiente
+
+- `ANTHROPIC_API_KEY` (obrigatória) — chave para o narrator Sonnet 4.6.
+- `OPENAI_API_KEY` (obrigatória) — Whisper local + GPT-4o-mini +
+  GPT-4o Vision.
+- `RDO_AGENT_MAX_TOKENS_OVERRIDE_<SCOPE>` (opcional) — sobrescreve o
+  `max_tokens` do narrator para um scope específico. Exemplo:
+
+  ```bash
+  RDO_AGENT_MAX_TOKENS_OVERRIDE_OVERVIEW=20000 \
+    rdo-agent narrate --obra X --scope obra
+  ```
+
+  Valores default em `MAX_TOKENS_BY_SCOPE`: day=6144, week=8192,
+  month=10240, overview/obra_overview=16384.
 
 ### Dependências de sistema (WeasyPrint / Laudo PDF)
 
@@ -160,14 +192,20 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.0.3-cleanup`
+### Estado atual: `v1.1-narrator-flexible`
 
-Última release de produto: `v1.0.3-cleanup` (25/04/2026).
-A `v1.0.2` foi sprint de higiene documental (sem mudança de
-comportamento). A `v1.0.3` fechou 7 dívidas cosméticas/menores
-(rename de seção do RDO, deps WeasyPrint documentadas, smart_truncate
-+ strip_emoji utilities, CSS Vestígio para tabelas/code/blockquote,
-pyMuPDF para validação de PDFs, threshold adversarial no validator).
+Última release de produto: `v1.1-narrator-flexible` (25/04/2026).
+
+- `v1.0.2` (higiene documental): docs alinhados com código (sem
+  mudança de comportamento).
+- `v1.0.3` (cleanup): 7 dívidas cosméticas/menores fechadas
+  (rename de seção do RDO, deps WeasyPrint, smart_truncate, strip_emoji,
+  CSS Vestígio extra, pyMuPDF para validação, threshold adversarial).
+- `v1.1` (narrator flexível): streaming via flag `--stream`,
+  `MAX_TOKENS` dinâmico por scope com override env, validator com
+  severity tiers (CRITICAL/WARNING/INFO + modo `strict`), detector novo
+  `CONTRACT_RENEGOTIATION` para identificar pares mensagem↔mensagem
+  com renegociação de valor sobre o mesmo escopo.
 
 Para roadmap completo e estado das sprints, ver:
 

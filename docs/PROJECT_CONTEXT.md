@@ -2,7 +2,7 @@
 
 > **Propósito deste documento:** servir como briefing completo pra qualquer nova conversa de IA (Claude, GPT, etc) assumir o projeto sem perda de contexto. Leia de ponta a ponta antes de tomar qualquer decisão técnica ou arquitetural.
 >
-> **Última atualização:** 25/04/2026 — versão rdo-agent v1.0.3-cleanup (7 dívidas pendentes fechadas pós v1.0.2-docs-sync)
+> **Última atualização:** 25/04/2026 — versão rdo-agent v1.1-narrator-flexible (Sessão 5: streaming + MAX_TOKENS dinâmico + severity tiers + detector CONTRACT_RENEGOTIATION)
 
 ---
 
@@ -436,6 +436,11 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
 ✅ v1.0.3  — Cleanup: 7 dívidas pendentes fechadas (Sessão 4 — #13,
               #33, #34, #36, #37, #39, #40). 21 testes novos.
               619 testes total verde.
+✅ v1.1    — Narrator flexível (Sessão 5 — #16, #27, #31, #32):
+              streaming, MAX_TOKENS dinâmico por scope, validator com
+              severity tiers (CRITICAL/WARNING/INFO + strict),
+              detector novo CONTRACT_RENEGOTIATION.
+              24 testes novos. 643 testes total verde.
 
 > **Nota sobre numeração de Sessões pós-v1.0:** ver `docs/ADR-005-numeracao-sessoes-pos-v1.md`.
 > A audit detectou que o rótulo "Sessão 4" estava sendo usado em duas
@@ -564,6 +569,31 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
   `docs/ADR-004-markdown-rendering-laudo.md` e
   `docs/sessions/SESSION_LOG_SESSAO_3_8_MARKDOWN_FIX.md`.
 
+### 9.7 Resolvidas em Sessão 5 (v1.1-narrator-flexible)
+
+4 dívidas técnicas fechadas em commits atômicos:
+
+- ~~#32~~: `MAX_TOKENS_BY_SCOPE` + `_max_tokens_for_scope()` com
+  override via env var `RDO_AGENT_MAX_TOKENS_OVERRIDE_<SCOPE>` —
+  `deb324a`. Tabela: day=6144, week=8192, month=10240,
+  overview/obra_overview=16384. Logging "tokens used vs allocated"
+  por scope.
+- ~~#31~~: enum `ValidationSeverity` (CRITICAL/WARNING/INFO) +
+  `CHECK_SEVERITY` dict + `strict=True` em `validate_narrative` —
+  `aee218b`. Comportamento default preservado.
+- ~~#16~~: `narrate_streaming(dossier, conn, on_chunk)` +
+  flag CLI `--stream` — `2737e02`. Usa `client.messages.stream()`
+  nativo do SDK. Persistência fora da função (caller responsável).
+- ~~#27~~: detector `CONTRACT_RENEGOTIATION` em
+  `detectors/contract_renegotiation.py` — `75227cb`. Pares
+  classification↔classification, janela 30d, variação em [10%, 80%],
+  ≥1 stem HIGH compartilhado obrigatório. Validado em corpus
+  EVERALDO (1 correlação detectada conf=0.85 STRONG).
+
+**Renumeração:** seção 9.6 (Sessão 4) preservada; esta seção 9.7 é
+nova. As dívidas pendentes (antes em 9.7) viraram seção **9.8** ou
+"todas resolvidas" — ver abaixo.
+
 ### 9.6 Resolvidas em Sessão 4 (v1.0.3-cleanup)
 
 7 dívidas cosméticas/menores fechadas em commits atômicos:
@@ -594,19 +624,19 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
   50% padrão, 30% em modo adversarial (prompt_version contém
   "adversarial") — `53df9af`. Falsos warnings em V4 evitados.
 
-### 9.7 Pendentes (pós-v1.0.3) — 4 abertas
+### 9.8 Pendentes (pós-v1.1) — 0 abertas das 40
 
-| # | Descrição | Tipo | Sugestão de bucket |
-|---|---|---|---|
-| #16 | Streaming no narrator (vs fix de timeout) | arquitetural | Sessão 5 (narrator-flexible) |
-| #27 | Detector futuro CONTRACT_RENEGOTIATION | feature | Sessão 5 (narrator-flexible) |
-| #31 | Validator MAX_BODY_CHARS — segmentar em tiers (critical vs informational) | refactor | Sessão 5 (narrator-flexible) |
-| #32 | MAX_TOKENS dinâmico por scope (overview > day) | arquitetural | Sessão 5 (narrator-flexible) |
+Todas as dívidas pendentes documentadas até v1.0.3 foram fechadas em
+v1.1 (Sessão 5). Não há débitos abertos no inventário formal.
 
-> **Total fechadas:** 26 (todas anteriores + #13, #33, #34, #36, #37,
-> #39, #40 desta sprint).
-> **Total abertas:** 4 — todas mapeadas para a Sessão 5.
-> **Documentadas em ADR:** #35 → ADR-006; #38 → ADR-004.
+> **Total fechadas:** 30 (todas anteriores + #13, #33, #34, #36, #37,
+> #39, #40 da v1.0.3 + #16, #27, #31, #32 da v1.1).
+> **Total abertas:** 0.
+> **Documentadas em ADR:** #35 → ADR-006 (tabela `events` ainda
+> aguarda decisão arquitetural; não conta como dívida aberta porque
+> a função fallback do adapter funciona); #38 → ADR-004.
+
+Novas dívidas que apareçam serão registradas a partir de **#41**.
 
 ---
 
@@ -647,7 +677,7 @@ Se futuro exigir semântica sofisticada, fica **Fase B.2** com fallback Claude �
 
 ---
 
-## 11. Métricas Atuais (v1.0.3, verificadas 25/04/2026)
+## 11. Métricas Atuais (v1.1, verificadas 25/04/2026)
 
 ```
 Corpus EVERALDO_SANTAQUITERIA (vault piloto):
@@ -657,22 +687,23 @@ transcriptions:      119
 classifications:     250
 visual_analyses:     96 (44 active + 52 archive)
 financial_records:   4 (R$ 12.530)
-forensic_narratives: 16 (4 v1 · 7 v2_correlations · 2 v3_gt · 3 v4_adversarial)
-correlations:        28 (9 com confidence ≥ 0.70)
+forensic_narratives: 17 (após Sessão 5: +1 overview adversarial regen)
+correlations:        29 (9 com confidence ≥ 0.70 + 1 CONTRACT_RENEGOTIATION)
 events:              0 (tabela existe no schema; ver ADR-006 sobre status)
 
 Código:
-Commits totais:      ~80+
-Tags publicadas:     13 versões + 9 safety checkpoints
-Testes passando:     619 (após Sessão 4 — cleanup +21 testes novos)
-Arquivos Python:     ~52+
-Linhas de código:    ~7.700+
+Commits totais:      ~90+
+Tags publicadas:     14 versões + 10 safety checkpoints
+Testes passando:     643 (após Sessão 5 — narrator-flexible +24 novos)
+Arquivos Python:     ~55+
+Linhas de código:    ~8.300+
 
-Custos acumulados até v1.0.3:
+Custos acumulados até v1.1:
 Desenvolvimento:     ~US$ 2.00
 Geração narrativas:  ~US$ 0.85 (Sessão 2 adversarial)
+Sessão 5 empírica:   ~US$ 0.31 (1 narrate API call em EVERALDO)
 Higiene + cleanup:   US$ 0.00 (puro código + docs)
-Total:               ~US$ 2.85 (≈ R$ 14)
+Total:               ~US$ 3.16 (≈ R$ 16)
 ```
 
 ---
