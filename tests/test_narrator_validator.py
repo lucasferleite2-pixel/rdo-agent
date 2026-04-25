@@ -5,8 +5,13 @@ from __future__ import annotations
 import pytest
 
 from rdo_agent.forensic_agent.validator import (
+    CHECK_SEVERITY,
     CRITICAL_CHECKS,
+    ValidationSeverity,
     _format_brl_patterns,
+    has_critical_failure,
+    has_info_failure,
+    has_warning_failure,
     validate_narrative,
 )
 
@@ -373,6 +378,118 @@ def test_validator_file_ids_threshold_adversarial_mode_30pct():
         prompt_version="narrator_v4_adversarial",
     )
     assert result["checks"]["file_ids_preservados"] is True
+
+
+# ---------------------------------------------------------------------------
+# Severity tiers (Sessão 5 · dívida #31)
+# ---------------------------------------------------------------------------
+
+
+def test_validator_severity_classification_complete():
+    """Todo check executado tem severity registrada em CHECK_SEVERITY."""
+    result = validate_narrative(
+        _good_narrative(), _sample_dossier_with_pix(),
+        _good_self_assessment(), _good_narrative(),
+    )
+    assert "severities" in result
+    for name in result["checks"]:
+        assert name in CHECK_SEVERITY, f"check '{name}' sem severity"
+        assert isinstance(result["severities"][name], ValidationSeverity)
+
+
+def test_validator_severity_critical_blocks_passed():
+    """Falha em CRITICAL invalida passed em ambos os modos."""
+    narrative = "Texto sem header.\n\n" + ("09:00 R$ 3.500,00 " * 30)
+    result = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+    )
+    assert result["checks"]["tem_abertura"] is False
+    assert result["passed"] is False
+    assert result["has_critical"] is True
+    assert has_critical_failure(result) is True
+
+
+def test_validator_severity_warning_does_not_block_default():
+    """Falha em WARNING NAO invalida passed no modo padrao."""
+    # _good_narrative cita financial info mas pode falhar file_ids/nomes
+    # se não tiver os literais. Vamos forçar uma falha de WARNING:
+    # narrativa com horario+valor mas sem file_ids do dossier
+    narrative = (
+        "# Narrativa: x\n\n"
+        + ("Mensagem às 09:00 às 11:13 R$ 3.500,00 "
+           "CONSTRUTORA E IMOBILIARIA VALE NOBRE LTDA "
+           "Everaldo Caitano Baia. " * 10)
+        + "\n\n---\n"
+    )
+    result = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+    )
+    # Critical verdes => passed True
+    assert result["passed"] is True
+    # Mas algum WARNING falhou (file_ids_preservados)
+    assert result["has_warning"] is True
+    assert has_warning_failure(result) is True
+
+
+def test_validator_severity_strict_blocks_on_warning():
+    """Modo strict=True: WARNING tambem invalida passed."""
+    narrative = (
+        "# Narrativa: x\n\n"
+        + ("Mensagem às 09:00 às 11:13 R$ 3.500,00 "
+           "CONSTRUTORA E IMOBILIARIA VALE NOBRE LTDA "
+           "Everaldo Caitano Baia. " * 10)
+        + "\n\n---\n"
+    )
+    result_default = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+    )
+    result_strict = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+        strict=True,
+    )
+    # Mesmas falhas, comportamento diferente
+    assert result_default["passed"] is True
+    assert result_strict["passed"] is False
+    # Severity diagnostica e' identica
+    assert result_default["has_critical"] is False
+    assert result_strict["has_critical"] is False
+    assert result_default["has_warning"] is True
+    assert result_strict["has_warning"] is True
+
+
+def test_validator_severity_info_never_blocks():
+    """Tem_fechamento eh INFO; nem default nem strict bloqueiam por
+    causa dele isolado."""
+    # Severity registry confirma a classificacao
+    assert CHECK_SEVERITY["tem_fechamento"] is ValidationSeverity.INFO
+
+    narrative = (
+        "# Narrativa: x\n\n"
+        "Às 09:00 m_abc123 mensagem inicial. "
+        "Às 11:13 PIX de R$ 3.500,00 do "
+        "CONSTRUTORA E IMOBILIARIA VALE NOBRE LTDA "
+        "para Everaldo Caitano Baia (f_img_pix), descrito como "
+        "50% sinal serralheria. " * 5
+        # nao incluimos --- (fechamento)
+    )
+    result = validate_narrative(
+        narrative, _sample_dossier_with_pix(),
+        _good_self_assessment(), narrative,
+        strict=True,
+    )
+    if not result["checks"]["tem_fechamento"]:
+        # Se INFO falhou isolado, passed nao deve cair por isso
+        info_only = (
+            not result["has_critical"]
+            and not result["has_warning"]
+            and has_info_failure(result)
+        )
+        if info_only:
+            assert result["passed"] is True
 
 
 def test_validator_file_ids_threshold_adversarial_still_fails_below_30pct():

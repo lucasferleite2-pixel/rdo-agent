@@ -22,6 +22,7 @@ Soft checks (warnings mas nao invalidam):
 from __future__ import annotations
 
 import re
+from enum import Enum
 from typing import Any
 
 # Limites para tamanho
@@ -38,13 +39,78 @@ INFERENCE_MARKERS = (
     "aparenta", "ao que parece", "pode ter", "talvez",
 )
 
-# Critical checks — sua falha invalida passed
-CRITICAL_CHECKS = {
-    "valores_preservados",
-    "horarios_preservados",
-    "tem_abertura",
-    "tamanho_razoavel",
+
+class ValidationSeverity(str, Enum):
+    """
+    Tier de severidade de cada check do validator F3 (Sessao 5, #31).
+
+    - CRITICAL: falha invalida ``passed``. Pipeline em qualquer modo
+      bloqueia.
+    - WARNING: falha gera warning. ``passed`` pode continuar True.
+      No modo ``strict=True`` tambem bloqueia.
+    - INFO: observacao nao-bloqueante. Nunca bloqueia. So aparece em
+      ``warnings`` se for util pra debug.
+    """
+
+    CRITICAL = "critical"
+    WARNING = "warning"
+    INFO = "info"
+
+
+# Tier por check name. CRITICAL_CHECKS (legacy) preservado para
+# compat — espelha o set abaixo.
+CHECK_SEVERITY: dict[str, ValidationSeverity] = {
+    # Critical: cobertura semantica e estrutura minima
+    "valores_preservados":      ValidationSeverity.CRITICAL,
+    "horarios_preservados":     ValidationSeverity.CRITICAL,
+    "tem_abertura":             ValidationSeverity.CRITICAL,
+    "tamanho_razoavel":         ValidationSeverity.CRITICAL,
+    # Warning: cobertura desejada mas nao bloqueante
+    "file_ids_preservados":     ValidationSeverity.WARNING,
+    "nomes_preservados":        ValidationSeverity.WARNING,
+    "marcadores_inferencia":    ValidationSeverity.WARNING,
+    "self_assessment_presente": ValidationSeverity.WARNING,
+    # Info: cosmetico (separador antes do bloco JSON)
+    "tem_fechamento":           ValidationSeverity.INFO,
 }
+
+# Critical checks — sua falha invalida passed (mantido para compat
+# externa; derivado de CHECK_SEVERITY).
+CRITICAL_CHECKS = frozenset(
+    name for name, sev in CHECK_SEVERITY.items()
+    if sev is ValidationSeverity.CRITICAL
+)
+
+
+def has_critical_failure(result: dict) -> bool:
+    """
+    True se algum check CRITICAL falhou. Equivalente a
+    ``not result['passed']`` no modo padrao, mas explicito para
+    callers que querem testar severidade.
+    """
+    checks = result.get("checks", {})
+    return any(
+        not ok and CHECK_SEVERITY.get(name) is ValidationSeverity.CRITICAL
+        for name, ok in checks.items()
+    )
+
+
+def has_warning_failure(result: dict) -> bool:
+    """True se algum check WARNING falhou."""
+    checks = result.get("checks", {})
+    return any(
+        not ok and CHECK_SEVERITY.get(name) is ValidationSeverity.WARNING
+        for name, ok in checks.items()
+    )
+
+
+def has_info_failure(result: dict) -> bool:
+    """True se algum check INFO falhou."""
+    checks = result.get("checks", {})
+    return any(
+        not ok and CHECK_SEVERITY.get(name) is ValidationSeverity.INFO
+        for name, ok in checks.items()
+    )
 
 
 def _format_brl_patterns(valor_brl: float) -> list[str]:
@@ -226,12 +292,18 @@ def validate_narrative(
     self_assessment: dict | None = None,
     full_narrative: str | None = None,
     prompt_version: str | None = None,
+    strict: bool = False,
 ) -> dict[str, Any]:
     """
     Valida narrativa vs dossier. Retorna dict com:
-      - passed: bool (todos critical checks ok)
+      - passed: bool — modo padrão: ``True`` se todos os critical checks
+        ok. Modo ``strict=True``: ``True`` apenas se críticos E warnings
+        ok (info segue não-bloqueante).
       - checks: {check_name: bool}
       - warnings: list[str]
+      - severities: {check_name: ValidationSeverity}
+      - has_critical: bool
+      - has_warning: bool
 
     Args:
         narrative_body: markdown sem bloco self_assessment
@@ -242,6 +314,9 @@ def validate_narrative(
         prompt_version: versão do prompt usada (ex: 'narrator_v4_adversarial').
             Quando 'adversarial' aparece no nome, o threshold de
             file_ids_preservados é relaxado (#33).
+        strict: se True, falha em WARNING também invalida ``passed``.
+            Default False mantém comportamento histórico (só CRITICAL
+            bloqueia). Sessão 5 / #31.
     """
     full = full_narrative if full_narrative is not None else narrative_body
     self_assessment = self_assessment or {}
@@ -287,17 +362,41 @@ def validate_narrative(
     checks["self_assessment_presente"] = ok
     warnings.extend(w)
 
-    # passed = todos os critical checks True
-    passed = all(checks[c] for c in CRITICAL_CHECKS)
+    # Severities resolvidas para cada check executado.
+    severities = {
+        name: CHECK_SEVERITY.get(name, ValidationSeverity.INFO)
+        for name in checks
+    }
+
+    # passed (default) = todos os critical checks True
+    # passed (strict)  = critical AND warning todos True (info ainda
+    # nao-bloqueante)
+    crit_ok = all(
+        ok for name, ok in checks.items()
+        if severities[name] is ValidationSeverity.CRITICAL
+    )
+    warn_ok = all(
+        ok for name, ok in checks.items()
+        if severities[name] is ValidationSeverity.WARNING
+    )
+    passed = (crit_ok and warn_ok) if strict else crit_ok
 
     return {
         "passed": passed,
         "checks": checks,
         "warnings": warnings,
+        "severities": severities,
+        "has_critical": not crit_ok,
+        "has_warning": not warn_ok,
     }
 
 
 __all__ = [
+    "ValidationSeverity",
+    "CHECK_SEVERITY",
+    "has_critical_failure",
+    "has_warning_failure",
+    "has_info_failure",
     "CRITICAL_CHECKS",
     "INFERENCE_MARKERS",
     "MAX_BODY_CHARS",
