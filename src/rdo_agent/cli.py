@@ -1657,5 +1657,54 @@ def stats_cmd(obra: str) -> None:
             console.print(t5)
 
 
+@main.command(name="estimate")
+@click.option(
+    "--zip", "zip_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="ZIP-fonte do export do WhatsApp",
+)
+@click.option(
+    "--vault-root",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Override do vault root para checagem de disco. Default: ~/rdo_vaults",
+)
+def estimate_cmd(zip_path: Path, vault_root: Path | None) -> None:
+    """
+    Pre-flight check (Sessão 7 / #55).
+
+    Estima custo, tempo e disco antes de processar um ZIP do WhatsApp.
+    Não extrai nem modifica nada — só lê metadados e amostra de
+    chat.txt.
+    """
+    from rdo_agent.preflight import preflight_check
+    from rdo_agent.preflight.estimator import format_report_lines
+
+    try:
+        report = preflight_check(zip_path, vault_root=vault_root)
+    except FileNotFoundError as e:
+        console.print(f"[red]x ZIP nao encontrado:[/red] {e}")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]x falha:[/red] {type(e).__name__}: {e}")
+        sys.exit(2)
+
+    for line in format_report_lines(report):
+        if line.startswith("  !"):
+            console.print(f"[yellow]{line}[/yellow]")
+        elif line.endswith(("✓",)):
+            console.print(f"[green]{line}[/green]")
+        elif line.endswith(("✗",)):
+            console.print(f"[red]{line}[/red]")
+        elif line and not line.startswith(" "):
+            console.print(f"[bold]{line}[/bold]")
+        else:
+            console.print(line)
+
+    if not report.disk_ok or report.cost.total_usd > 50:
+        sys.exit(3)
+
+
 if __name__ == "__main__":
     main()
