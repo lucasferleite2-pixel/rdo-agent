@@ -68,6 +68,7 @@ from rdo_agent.forensic_agent.narrator import (
     PROMPT_VERSION,
     NarrationResult,
     narrate,
+    narrate_streaming,
 )
 from rdo_agent.forensic_agent.persistence import (
     save_narrative,
@@ -85,6 +86,7 @@ __all__ = [
     "build_obra_overview_dossier",
     "compute_dossier_hash",
     "narrate",
+    "narrate_streaming",
     "save_narrative",
     "validate_narrative",
     # Fase B

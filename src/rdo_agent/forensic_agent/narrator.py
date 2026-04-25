@@ -27,6 +27,7 @@ import json
 import re
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -398,6 +399,109 @@ def _call_anthropic_with_retry(
     raise last_exc
 
 
+def _call_anthropic_stream(
+    client, dossier_json: str, scope: str,
+    conn: sqlite3.Connection, obra: str,
+    system_prompt: str,
+    on_chunk: Callable[[str], None],
+) -> tuple[str, int, int, int]:
+    """
+    Variante streaming do `_call_anthropic_with_retry` (#16).
+
+    Usa `client.messages.stream()` (context manager). Cada delta de
+    texto e' passado pra ``on_chunk`` em tempo real. Acumula
+    internamente e retorna (text, pt, ct, api_call_id) ao fim.
+
+    Notas:
+    - Sem retry. Stream falhando no meio nao tem rollback bom; melhor
+      caller decidir se tenta de novo.
+    - Logging em api_calls igual a versao sync (apenas ao fim, com
+      response acumulado).
+    """
+    user_content = NARRATOR_USER_TEMPLATE.format(
+        dossier_json=dossier_json, scope=scope,
+    )
+    max_tokens = _max_tokens_for_scope(scope)
+    request_body = {
+        "model": MODEL,
+        "max_tokens": max_tokens,
+        "temperature": TEMPERATURE,
+        "system": system_prompt,
+        "messages": [{"role": "user", "content": user_content}],
+    }
+    request_json = json.dumps(
+        request_body, ensure_ascii=False, sort_keys=True,
+    )
+    request_hash = sha256_text(request_json)
+    started_dt = datetime.now(UTC)
+    started_at = started_dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+    try:
+        with client.messages.stream(**request_body) as stream:
+            text_parts: list[str] = []
+            for chunk in stream.text_stream:
+                text_parts.append(chunk)
+                on_chunk(chunk)
+            final_message = stream.get_final_message()
+    except Exception as exc:
+        finished_dt = datetime.now(UTC)
+        latency_ms = int((finished_dt - started_dt).total_seconds() * 1000)
+        err_type = _classify_error_type(exc)
+        _log_api_call(
+            conn,
+            obra=obra, request_hash=request_hash,
+            request_json=request_json,
+            response_hash=None, response_json=None,
+            prompt_tokens=None, completion_tokens=None,
+            cost_usd=0.0,
+            started_at=started_at,
+            finished_at=finished_dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            latency_ms=latency_ms,
+            error_message=f"{err_type}: {exc}",
+            error_type=err_type,
+        )
+        conn.commit()
+        raise
+
+    finished_dt = datetime.now(UTC)
+    latency_ms = int((finished_dt - started_dt).total_seconds() * 1000)
+    text_content = "".join(text_parts)
+
+    usage = getattr(final_message, "usage", None)
+    prompt_tokens = int(getattr(usage, "input_tokens", 0) or 0) if usage else 0
+    completion_tokens = int(getattr(usage, "output_tokens", 0) or 0) if usage else 0
+    cost_usd = _compute_cost_usd(prompt_tokens, completion_tokens, MODEL)
+
+    response_json_str = json.dumps(
+        {
+            "text": text_content,
+            "usage": {
+                "input_tokens": prompt_tokens,
+                "output_tokens": completion_tokens,
+            },
+            "stop_reason": getattr(final_message, "stop_reason", None),
+            "streaming": True,
+        },
+        ensure_ascii=False, sort_keys=True,
+    )
+    response_hash = sha256_text(response_json_str)
+    api_call_id = _log_api_call(
+        conn,
+        obra=obra, request_hash=request_hash,
+        request_json=request_json,
+        response_hash=response_hash, response_json=response_json_str,
+        prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+        cost_usd=cost_usd,
+        started_at=started_at,
+        finished_at=finished_dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+        latency_ms=latency_ms,
+        error_message=None,
+        error_type=None,
+    )
+    conn.commit()
+    return text_content, prompt_tokens, completion_tokens, api_call_id
+
+
 def narrate(
     dossier: dict,
     conn: sqlite3.Connection,
@@ -472,9 +576,89 @@ def narrate(
     )
 
 
+def narrate_streaming(
+    dossier: dict,
+    conn: sqlite3.Connection,
+    on_chunk: Callable[[str], None],
+) -> NarrationResult:
+    """
+    Variante streaming de :func:`narrate` (#16).
+
+    Comportamento idêntico ao ``narrate`` exceto que cada delta de
+    texto é entregue ao callback ``on_chunk(text)`` conforme chega
+    (UX ao vivo no terminal / browser). Persistência (DB + arquivo)
+    fica fora desta função — o caller é responsável por chamar
+    ``save_narrative`` depois.
+
+    Args:
+        dossier: idem ``narrate``.
+        conn: idem ``narrate``.
+        on_chunk: callback chamado para cada delta. Receba string.
+            Tipicamente ``lambda c: print(c, end="", flush=True)``.
+
+    Returns:
+        ``NarrationResult`` completo, montado após o stream encerrar.
+        Se a resposta não tiver self_assessment, ``is_malformed=True``
+        (mesmo critério da versão sync).
+
+    Raises:
+        RuntimeError: ANTHROPIC_API_KEY ausente.
+        Erros de stream propagam (sem retry).
+    """
+    client = _get_anthropic_client()
+    dossier_json = json.dumps(dossier, ensure_ascii=False, indent=2)
+    obra = dossier.get("obra", "")
+    scope = dossier.get("scope", "")
+
+    system_prompt, prompt_version = _select_prompt_and_version(dossier)
+
+    text, pt, ct, api_call_id = _call_anthropic_stream(
+        client, dossier_json, scope, conn, obra,
+        system_prompt=system_prompt,
+        on_chunk=on_chunk,
+    )
+    cost = _compute_cost_usd(pt, ct, MODEL)
+
+    allocated = _max_tokens_for_scope(scope)
+    log.info(
+        "narrator [stream] tokens: scope=%s used=%d allocated=%d (%.0f%%) "
+        "cost=$%.4f",
+        scope or "<unknown>", ct, allocated,
+        (ct / allocated * 100) if allocated else 0.0, cost,
+    )
+
+    self_assessment, body = _extract_self_assessment(text)
+    body, n_emojis_body = strip_emoji(body)
+    text, n_emojis_text = strip_emoji(text)
+    if n_emojis_body or n_emojis_text:
+        log.warning(
+            "strip_emoji [stream]: %d removidos do body, %d do markdown completo "
+            "(scope=%s, prompt_version=%s)",
+            n_emojis_body, n_emojis_text, scope, prompt_version,
+        )
+
+    is_malformed = not self_assessment
+    reason = "missing_self_assessment_block" if is_malformed else None
+
+    return NarrationResult(
+        markdown_text=text,
+        markdown_body=body,
+        self_assessment=self_assessment,
+        model=MODEL,
+        prompt_version=prompt_version,
+        api_call_id=api_call_id,
+        cost_usd=cost,
+        prompt_tokens=pt,
+        completion_tokens=ct,
+        is_malformed=is_malformed,
+        malformed_reason=reason,
+    )
+
+
 __all__ = [
     "ANTHROPIC_MAX_RETRIES",
     "ANTHROPIC_TIMEOUT_SEC",
+    "MAX_TOKENS_BY_SCOPE",
     "MODEL",
     "PRICING_USD_PER_TOKEN",
     "PROMPT_VERSION",
@@ -482,4 +666,5 @@ __all__ = [
     "PROMPT_VERSION_GT",
     "NarrationResult",
     "narrate",
+    "narrate_streaming",
 ]

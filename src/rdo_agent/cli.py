@@ -844,12 +844,22 @@ def review(obra: str) -> None:
         "com --context."
     ),
 )
+@click.option(
+    "--stream", "stream", is_flag=True, default=False,
+    help=(
+        "Imprime a narrativa em tempo real conforme o modelo gera "
+        "(API streaming, divida #16). DB + arquivo so sao gravados "
+        "ao fim do stream completo. Sem retry — falhas no meio do "
+        "stream propagam."
+    ),
+)
 def narrate_cmd(
     obra: str, dia: str | None, scope: str | None,
     skip_cache: bool, reports_root: str,
     context_path: Path | None,
     min_correlation_conf: float,
     adversarial: bool,
+    stream: bool,
 ) -> None:
     """Gera narrativa forense (Sprint 5 Fase A+C) via agente Sonnet 4.6."""
     from rdo_agent.forensic_agent import (
@@ -857,6 +867,7 @@ def narrate_cmd(
         build_obra_overview_dossier,
         compute_dossier_hash,
         narrate,
+        narrate_streaming,
         save_narrative,
         validate_narrative,
     )
@@ -975,7 +986,23 @@ def narrate_cmd(
                 continue
 
         try:
-            narration = narrate(dossier, conn)
+            if stream:
+                console.print(
+                    f"[dim]> streaming narrativa ({sc} {ref})...[/dim]"
+                )
+
+                def _emit(chunk: str) -> None:
+                    # Imprime sem newline e flush imediato; a CLI segue
+                    # responsavel pelo line wrap natural do markdown.
+                    sys.stdout.write(chunk)
+                    sys.stdout.flush()
+
+                narration = narrate_streaming(dossier, conn, on_chunk=_emit)
+                # Newline final apos stream pra separar do proximo print do CLI
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+            else:
+                narration = narrate(dossier, conn)
         except Exception as exc:
             console.print(
                 f"[red]x falha na geracao ({type(exc).__name__}): "
