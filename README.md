@@ -158,6 +158,31 @@ reais das APIs:
 - `RDO_AGENT_RATE_LIMIT_ANTHROPIC_PER_MIN` (default `20`).
 - `RDO_AGENT_DAILY_QUOTA_USD` (default `100.0`).
 
+## Vision cascade & OCR routing (v1.5+)
+
+Para reduzir custo de chamadas a OpenAI Vision, o pipeline aplica
+filtros pré-API em 4 camadas (ver
+`docs/ADR-009-vision-cascade.md`):
+
+1. **Heurísticas locais** — descarta sticker/emoji/blur óbvio
+   (PIL + Laplacian variance).
+2. **pHash dedup** — imagens visualmente iguais (incluindo
+   redimensionamentos) compartilham análise.
+3. **Routing heurístico** — comprovantes/documentos vão para OCR
+   especializado (`OCRRouter`), não para Vision.
+4. **Vision API** — só é chamada em sobreviventes.
+
+Modo agressivo (thresholds estritos) ativado por env var:
+
+```bash
+RDO_AGENT_VISUAL_FILTER_AGGRESSIVE=true \
+  rdo-agent ...
+```
+
+`OCRRouter` faz fail-open quando Tesseract está ausente ou idioma
+`por` não instalado — emite warning único e assume "tem texto"
+para preservar mídia legítima.
+
 ## Pre-flight check (v1.3+)
 
 Antes de disparar processamento pesado em ZIP grande, estime
@@ -223,8 +248,15 @@ O módulo de geração de laudo PDF (Vestígio) usa WeasyPrint, que requer
 **Ubuntu / Debian / WSL2 Ubuntu:**
 
 ```bash
+# Mínimo — WeasyPrint
 sudo apt-get install -y libcairo2 libpango-1.0-0 libpangoft2-1.0-0 \
                         libgdk-pixbuf-2.0-0
+
+# Vídeo (Sessão 9 / dívida #48 — frame extraction)
+sudo apt-get install -y ffmpeg
+
+# OCR opcional (Sessão 9 / dívida #49 — fail-open se ausente)
+sudo apt-get install -y tesseract-ocr tesseract-ocr-por
 ```
 
 (WSL2 Ubuntu 24.04 já vem com essas libs por padrão.)
@@ -232,13 +264,21 @@ sudo apt-get install -y libcairo2 libpango-1.0-0 libpangoft2-1.0-0 \
 **Fedora / RHEL:**
 
 ```bash
+# Mínimo — WeasyPrint
 sudo dnf install -y cairo pango gdk-pixbuf2
+
+# Vídeo + OCR opcional
+sudo dnf install -y ffmpeg tesseract tesseract-langpack-por
 ```
 
 **macOS (Homebrew):**
 
 ```bash
+# Mínimo — WeasyPrint
 brew install cairo pango gdk-pixbuf
+
+# Vídeo + OCR (lang-by-default vem com tesseract-lang)
+brew install ffmpeg tesseract tesseract-lang
 ```
 
 Em ambientes minimalistas (containers Alpine, imagens Docker `python:3.12-slim`,
@@ -267,7 +307,7 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.4-efficient-classify`
+### Estado atual: `v1.5-efficient-vision`
 
 Última release de produto: `v1.4-efficient-classify` (25/04/2026).
 
@@ -284,9 +324,17 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
   idempotência + checkpoint integrados ao GRUPO 2; classify
   pipeline 3-tier — `ClassifyCache` exact-match, `JaccardDedup`
   léxico (sem deps novas), `BatchClassifier` para OpenAI Batch
-  API (50% desconto). ADR-008 trava rationale; dívida #59
-  registrada para upgrade futuro a sentence-transformers se
-  evidência de produção justificar.
+  API (50% desconto). ADR-008; dívida #59 registrada.
+- `v1.5` (eficiência custo visual): vision cascade 4 camadas
+  — `HeuristicImageFilter` (modos conservative/aggressive),
+  `PerceptualHashDedup` (`imagehash>=4.3`, ~100MB vs ~2GB de
+  torch), `RoutingClassifier` (aspect ratio + Tesseract bbox),
+  Vision API com circuit breaker `openai_vision`. Promove
+  `scripts/extract_video_frames.py` para `src/rdo_agent/video/`
+  com integração StructuredLogger. `OCRRouter` coordena os 3
+  módulos OCR via Tesseract com fail-open. ADR-009 trava
+  rationale; dívida #60 registrada (CLIP futuro). **Fim do
+  GRUPO 3 (eficiência) do roadmap reformulado.**
 
 Para roadmap completo e estado das sprints, ver:
 

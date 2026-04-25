@@ -2,7 +2,7 @@
 
 > **Propósito deste documento:** servir como briefing completo pra qualquer nova conversa de IA (Claude, GPT, etc) assumir o projeto sem perda de contexto. Leia de ponta a ponta antes de tomar qualquer decisão técnica ou arquitetural.
 >
-> **Última atualização:** 25/04/2026 — versão rdo-agent v1.4-efficient-classify (Sessão 8: transcribe checkpoint + classify cache 3-tier; ADR-008; dívida #59 registrada)
+> **Última atualização:** 25/04/2026 — versão rdo-agent v1.5-efficient-vision (Sessão 9: vision cascade 4 camadas + video module + OCR router; ADR-009; dívida #60 registrada). **GRUPO 3 (eficiência) completo.**
 
 ---
 
@@ -464,6 +464,19 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
               rationale; dívida #59 registrada para upgrade futuro
               a sentence-transformers. 53 testes novos. 791 testes
               total verde.
+✅ v1.5    — Eficiência custo visual (Sessão 9 — #47, #48, #49):
+              vision cascade 4 camadas — `HeuristicImageFilter`
+              (conservative+aggressive), `PerceptualHashDedup` via
+              `imagehash` (~100MB vs ~2GB de torch), `RoutingClassifier`
+              (heurística aspect ratio + Tesseract), Vision API com
+              circuit breaker `openai_vision` próprio. Promove
+              `scripts/extract_video_frames.py` para módulo
+              `src/rdo_agent/video/`. `OCRRouter` coordena
+              ocr_extractor/financial_ocr/document_extractor via
+              Tesseract com fail-open. ADR-009 trava rationale;
+              dívida #60 registrada para upgrade futuro a CLIP.
+              57 testes novos. 848 testes total verde. **Fim do
+              GRUPO 3 (eficiência custo) do roadmap reformulado.**
 
 > **Nota sobre numeração de Sessões pós-v1.0:** ver `docs/ADR-005-numeracao-sessoes-pos-v1.md`.
 > A audit detectou que o rótulo "Sessão 4" estava sendo usado em duas
@@ -731,29 +744,58 @@ nova. As dívidas pendentes (antes em 9.7) viraram seção **9.8** ou
   Estimativa: 1 sprint pequena. Decisão concreta vem em ADR-009
   futuro.
 
-### 9.11 Pendentes (pós-v1.4) — 10 abertas + #59 (registrada/adiada)
+### 9.11 Resolvidas em Sessão 9 (v1.5-efficient-vision)
+
+3 dívidas fechadas + 1 nova registrada:
+
+- ~~#47~~: vision cascade 4 camadas — `438be85`. Heurístico (PIL +
+  Laplacian variance) + pHash dedup (`imagehash>=4.3`) + routing
+  heurístico (aspect ratio + Tesseract bbox count) + Vision API.
+  Singleton novo `get_openai_vision_circuit()` separado de openai
+  chat e whisper (perfis de rate/falha independentes). ADR-009
+  trava rationale.
+- ~~#48~~: promoção de `scripts/extract_video_frames.py` para
+  `src/rdo_agent/video/` — `0dc7693`. Discovery (P3 REFUTED parcial)
+  revelou que a lógica já rodou em EVERALDO (Sprint 4 Op3b, 35
+  frames). Em vez de reescrever, **promovemos** com integração
+  StructuredLogger + wrapper `process_videos_pending(conn, obra)`.
+  Audio split de vídeo já existia em `extractor` (fora do escopo).
+- ~~#49~~: `OCRRouter` em `src/rdo_agent/ocr_router/` — `97c7223`.
+  Coordena ocr_extractor / financial_ocr / document_extractor via
+  Tesseract com fail-open (warning único quando idioma ausente).
+  Tabela `ocr_cache` para evitar reprocessamento. **Não substitui**
+  os 3 módulos OCR existentes — apenas roteia.
+
+**Dívida nova #60 registrada (não fechada — adiada com critérios)**:
+
+- **#60** — Upgrade pre-classify visual de heurística (aspect ratio
+  + Tesseract) para CLIP/zero-shot. Triggers: corpus > 1000 imagens
+  E pHash hit rate < 20%; > 10% memes vazando para Vision API;
+  operador identifica desperdício. Estimativa: 1 sprint pequena.
+  Decisão concreta vem em ADR-010 futuro.
+
+### 9.12 Pendentes (pós-v1.5) — 7 abertas + #59 + #60 (registradas/adiadas)
 
 Conforme roadmap reformulado, dívidas restantes estão alocadas para
 Sessões 8-14:
 
 | # | Descrição curta | Sessão alvo |
 |---|---|---|
-| #47 | Vision filtro cascata | 9 (v1.5-efficient-vision) |
-| #48 | Frames de vídeo | 9 |
-| #49 | OCR roteamento | 9 |
 | #50 | Correlator janela + workers | 10 (v1.6-scale-analytics) |
 | #51 | Narrator hierárquico | 10 |
 | #52 | Cache narrativas | 10 |
 | #56 | Refactor obra↔canal (BREAKING) | 12 (v2.0-alpha-multi-canal) |
 | #57 | Cross-channel + ledger consolidado | 13 (v2.1-consolidator) |
 | #58 | Framework plugável de outputs | 14 (v2.2-modular-outputs) |
-| #59 | Upgrade Jaccard → sentence-transformers (sob trigger) | quando trigger ativar (não programada) |
+| #59 | Upgrade Jaccard → sentence-transformers (sob trigger) | quando trigger ativar |
+| #60 | Pre-classify visual zero-shot (CLIP/transformers) (sob trigger) | quando trigger ativar |
 
-> **Total fechadas:** 40 (anteriores + #45, #46 desta sprint).
-> **Total abertas:** 10 + #59 (registrada com triggers, adiada
+> **Total fechadas:** 43 (anteriores + #47, #48, #49 desta sprint).
+> **Total abertas:** 7 + #59 + #60 (registradas com triggers, adiadas
 > conscientemente).
 > **ADRs ativos:** ADR-007 (state machine wrapper — aceito);
-> ADR-008 (classify 3-tier — aceito).
+> ADR-008 (classify 3-tier — aceito); ADR-009 (vision cascade 4
+> camadas — aceito).
 > **ADRs resolvidos em sprints anteriores:** ADR-006 (events table —
 > REMOVE executado em v1.3).
 
@@ -796,7 +838,7 @@ Se futuro exigir semântica sofisticada, fica **Fase B.2** com fallback Claude �
 
 ---
 
-## 11. Métricas Atuais (v1.4, verificadas 25/04/2026)
+## 11. Métricas Atuais (v1.5, verificadas 25/04/2026)
 
 ```
 Corpus EVERALDO_SANTAQUITERIA (vault piloto):
@@ -811,20 +853,21 @@ correlations:        29 (9 com confidence ≥ 0.70 + 1 CONTRACT_RENEGOTIATION)
 events:              0 (tabela existe no schema; ver ADR-006 sobre status)
 
 Código:
-Commits totais:      ~105+
-Tags publicadas:     17 versões + 13 safety checkpoints
-Testes passando:     791 (após Sessão 8 — efficient-classify +53 novos)
-Arquivos Python:     ~70+
-Linhas de código:    ~11.500+
+Commits totais:      ~110+
+Tags publicadas:     18 versões + 14 safety checkpoints
+Testes passando:     848 (após Sessão 9 — efficient-vision +57 novos)
+Arquivos Python:     ~75+
+Linhas de código:    ~13.000+
 
-Custos acumulados até v1.4:
+Custos acumulados até v1.5:
 Desenvolvimento:     ~US$ 2.00
 Geração narrativas:  ~US$ 0.85 (Sessão 2 adversarial)
 Sessão 5 empírica:   ~US$ 0.31 (1 narrate API call em EVERALDO)
 Higiene + cleanup:   US$ 0.00 (puro código + docs)
 Sessão 6 (resiliência): US$ 0.00 (puro código + validação local)
 Sessão 7 (ingestion):   US$ 0.00 (puro código + validação local)
-Sessão 8 (efficient):   US$ 0.00 (puro código + mocks)
+Sessão 8 (efficient classify): US$ 0.00 (mocks)
+Sessão 9 (efficient visual):   US$ 0.00 (fixtures + read-only EVERALDO)
 Total:               ~US$ 3.16 (≈ R$ 16)
 ```
 
