@@ -240,6 +240,7 @@ class CostQuota:
 
 _OPENAI_CIRCUIT: CircuitBreaker | None = None
 _OPENAI_WHISPER_CIRCUIT: CircuitBreaker | None = None
+_OPENAI_VISION_CIRCUIT: CircuitBreaker | None = None
 _ANTHROPIC_CIRCUIT: CircuitBreaker | None = None
 _OPENAI_RATE: RateLimiter | None = None
 _ANTHROPIC_RATE: RateLimiter | None = None
@@ -264,6 +265,18 @@ def get_openai_whisper_circuit() -> CircuitBreaker:
     if _OPENAI_WHISPER_CIRCUIT is None:
         _OPENAI_WHISPER_CIRCUIT = CircuitBreaker(name="openai_whisper")
     return _OPENAI_WHISPER_CIRCUIT
+
+
+def get_openai_vision_circuit() -> CircuitBreaker:
+    """Singleton CircuitBreaker para OpenAI Vision API.
+
+    Separado dos circuits ``openai`` (chat) e ``openai_whisper``
+    pelo mesmo motivo — perfis de falha e rate limit independentes.
+    """
+    global _OPENAI_VISION_CIRCUIT
+    if _OPENAI_VISION_CIRCUIT is None:
+        _OPENAI_VISION_CIRCUIT = CircuitBreaker(name="openai_vision")
+    return _OPENAI_VISION_CIRCUIT
 
 
 def get_anthropic_circuit() -> CircuitBreaker:
@@ -298,10 +311,11 @@ def get_anthropic_rate_limiter() -> RateLimiter:
 
 def reset_singletons_for_test() -> None:
     """Reseta singletons (apenas para uso em testes)."""
-    global _OPENAI_CIRCUIT, _OPENAI_WHISPER_CIRCUIT
+    global _OPENAI_CIRCUIT, _OPENAI_WHISPER_CIRCUIT, _OPENAI_VISION_CIRCUIT
     global _ANTHROPIC_CIRCUIT, _OPENAI_RATE, _ANTHROPIC_RATE
     _OPENAI_CIRCUIT = None
     _OPENAI_WHISPER_CIRCUIT = None
+    _OPENAI_VISION_CIRCUIT = None
     _ANTHROPIC_CIRCUIT = None
     _OPENAI_RATE = None
     _ANTHROPIC_RATE = None

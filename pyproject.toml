@@ -49,6 +49,11 @@ dependencies = [
 
     # Markdown -> HTML nas narrativas do laudo (Fase 3.8 — dívida #38)
     "markdown>=3.5",
+
+    # Perceptual hash para dedup de imagens (Sessão 9 — dívida #47)
+    # Traz PyWavelets + scipy + numpy. ~100MB total. Substitui
+    # sentence-transformers/torch (~2GB) que ficou em dívida #59/#60.
+    "imagehash>=4.3",
 ]
 
 [project.optional-dependencies]

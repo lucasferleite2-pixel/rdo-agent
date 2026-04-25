@@ -31,6 +31,7 @@ from rdo_agent.observability.resilience import (
     get_anthropic_rate_limiter,
     get_openai_circuit,
     get_openai_rate_limiter,
+    get_openai_vision_circuit,
     get_openai_whisper_circuit,
 )
 
@@ -48,5 +49,6 @@ __all__ = [
     "get_anthropic_rate_limiter",
     "get_openai_circuit",
     "get_openai_rate_limiter",
+    "get_openai_vision_circuit",
     "get_openai_whisper_circuit",
 ]
