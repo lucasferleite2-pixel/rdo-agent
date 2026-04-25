@@ -170,9 +170,13 @@ class RateLimiter:
 
     def __init__(self, name: str, rate_per_min: int | None = None):
         self.name = name
-        self.rate_per_min = rate_per_min or 60
-        if self.rate_per_min <= 0:
+        # Default 60/min se param for None. Não usar truthiness aqui
+        # porque 0 é valor explícito inválido.
+        if rate_per_min is None:
+            rate_per_min = 60
+        if rate_per_min <= 0:
             raise ValueError("rate_per_min precisa ser > 0")
+        self.rate_per_min = rate_per_min
         self.tokens: float = float(self.rate_per_min)
         self.last_refill: float = time.time()
 
