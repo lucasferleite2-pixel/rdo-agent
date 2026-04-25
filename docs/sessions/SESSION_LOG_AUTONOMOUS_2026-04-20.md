@@ -1,5 +1,11 @@
 # Sessão Autônoma — 2026-04-20 (noite) a 2026-04-21 (manhã)
 
+> **Sprint:** Sprint 3 (base de conhecimento + classificador).
+> Encerrada com tag `v0.3.0-sprint3-code`.
+> Arquivo migrado da raiz do repo para `docs/sessions/` na Sprint de
+> Higiene Documental (`v1.0.2-docs-sync`, 25/04/2026) — atende
+> inconsistência #14 da auditoria de 25/04/2026.
+
 **Início:** 2026-04-20T19:46Z
 **Prompt inicial:** Operações 0 (detect-quality em produção) + 1 (Fase 2 CLI review) + 2 (Fase 3 classifier impl) + 3 (Fase 4 RDO piloto) + 4 (tag).
 **Política:** Push só após gates verdes; whitelist estrita; sem refatorar estrutura existente; API calls apenas Operação 0.
