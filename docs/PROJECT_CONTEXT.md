@@ -2,7 +2,7 @@
 
 > **Propósito deste documento:** servir como briefing completo pra qualquer nova conversa de IA (Claude, GPT, etc) assumir o projeto sem perda de contexto. Leia de ponta a ponta antes de tomar qualquer decisão técnica ou arquitetural.
 >
-> **Última atualização:** 25/04/2026 — versão rdo-agent v1.1-narrator-flexible (Sessão 5: streaming + MAX_TOKENS dinâmico + severity tiers + detector CONTRACT_RENEGOTIATION)
+> **Última atualização:** 25/04/2026 — versão rdo-agent v1.2-resilient-pipeline (Sessão 6: PipelineStateManager + dedup content_hash + logging JSONL + circuit breaker/rate limiter)
 
 ---
 
@@ -441,6 +441,12 @@ Em 15/04/2026, retrabalho significativo do alambrado foi necessário porque **me
               severity tiers (CRITICAL/WARNING/INFO + strict),
               detector novo CONTRACT_RENEGOTIATION.
               24 testes novos. 643 testes total verde.
+✅ v1.2    — Pipeline resiliente (Sessão 6 — #43, #44, #53, #54):
+              PipelineStateManager (wrapper sobre tabela `tasks`,
+              ver ADR-007), dedup defensivo via content_hash em
+              messages, structured JSONL logger + watch/stats CLI,
+              CircuitBreaker + RateLimiter + CostQuota. 55 testes
+              novos. 698 testes total verde.
 
 > **Nota sobre numeração de Sessões pós-v1.0:** ver `docs/ADR-005-numeracao-sessoes-pos-v1.md`.
 > A audit detectou que o rótulo "Sessão 4" estava sendo usado em duas
@@ -624,19 +630,59 @@ nova. As dívidas pendentes (antes em 9.7) viraram seção **9.8** ou
   50% padrão, 30% em modo adversarial (prompt_version contém
   "adversarial") — `53df9af`. Falsos warnings em V4 evitados.
 
-### 9.8 Pendentes (pós-v1.1) — 0 abertas das 40
+### 9.8 Resolvidas em Sessão 6 (v1.2-resilient-pipeline)
 
-Todas as dívidas pendentes documentadas até v1.0.3 foram fechadas em
-v1.1 (Sessão 5). Não há débitos abertos no inventário formal.
+4 dívidas do roadmap reformulado fechadas:
 
-> **Total fechadas:** 30 (todas anteriores + #13, #33, #34, #36, #37,
-> #39, #40 da v1.0.3 + #16, #27, #31, #32 da v1.1).
-> **Total abertas:** 0.
-> **Documentadas em ADR:** #35 → ADR-006 (tabela `events` ainda
-> aguarda decisão arquitetural; não conta como dívida aberta porque
-> a função fallback do adapter funciona); #38 → ADR-004.
+- ~~#44~~: `PipelineStateManager` wrapper sobre `tasks` (não nova
+  tabela) + CLI `pipeline-status` / `pipeline-reset` — `0651819`. Ver
+  ADR-007. Discovery revelou que a state machine já existia na tabela
+  `tasks` populada desde Sprint 1 (675 rows ativos no EVERALDO);
+  wrapper expõe a state machine como API observable + recovery
+  helpers, sem migration nova.
+- ~~#43~~: dedup defensivo via `content_hash` em messages — `de4c33e`.
+  2 camadas co-existem: PK determinístico (existente, dedupa ZIP
+  idêntico) + UNIQUE(obra, content_hash) novo (dedupa ZIP editado).
+  226/226 messages do EVERALDO backfilled durante migration.
+- ~~#53~~: `StructuredLogger` emitindo JSONL em
+  `~/.rdo-agent/logs/<corpus>/<YYYY-MM-DD>.jsonl` — `7c26dae`. CLI
+  `watch` (snapshot, sem tail-follow nesta versão) e `stats`
+  (agregação de counts/cost/durations/falhas).
+- ~~#54~~: `CircuitBreaker` + `RateLimiter` + `CostQuota` em
+  `src/rdo_agent/observability/resilience.py` — `a254bbd`. Singletons
+  cross-module disponíveis para wiring futuro (não duplica retry
+  per-module que já funciona em narrator/transcriber/visual_analyzer).
 
-Novas dívidas que apareçam serão registradas a partir de **#41**.
+### 9.9 Pendentes (pós-v1.2) — 11 abertas (todas do roadmap reformulado)
+
+Conforme PROJECT_CONTEXT addendum 25/04 (roadmap reformulado), as
+dívidas restantes estão alocadas para Sessões 7-13:
+
+| # | Descrição curta | Sessão alvo |
+|---|---|---|
+| #41 | Ingestão streaming sem RAM | 7 (v1.3-safe-ingestion) |
+| #42 | Mídia copy-on-demand | 7 |
+| #55 | Pre-flight check (custo/tempo/disco) | 7 |
+| #45 | Transcribe checkpoint | 8 (v1.4-efficient-classify) |
+| #46 | Classify cache + dedup + batch | 8 |
+| #47 | Vision filtro cascata | 9 (v1.5-efficient-vision) |
+| #48 | Frames de vídeo | 9 |
+| #49 | OCR roteamento | 9 |
+| #50 | Correlator janela + workers | 10 (v1.6-scale-analytics) |
+| #51 | Narrator hierárquico | 10 |
+| #52 | Cache narrativas | 10 |
+| #56 | Refactor obra↔canal (BREAKING) | 12 (v2.0-alpha-multi-canal) |
+| #57 | Cross-channel + ledger consolidado | 13 (v2.1-consolidator) |
+| #58 | Framework plugável de outputs | 14 (v2.2-modular-outputs) |
+
+Mais a decisão pendente sobre tabela `events` (ADR-006) que será
+endereçada na Sessão 7 junto com ingestão.
+
+> **Total fechadas:** 34 (anteriores + #43, #44, #53, #54 desta sprint).
+> **Total abertas:** 14 (todas mapeadas para sessões 7-14 do roadmap
+> reformulado).
+> **ADRs ativos:** ADR-006 (events table — pendente decisão Sessão 7);
+> ADR-007 (state machine wrapper — aceito).
 
 ---
 
@@ -677,7 +723,7 @@ Se futuro exigir semântica sofisticada, fica **Fase B.2** com fallback Claude �
 
 ---
 
-## 11. Métricas Atuais (v1.1, verificadas 25/04/2026)
+## 11. Métricas Atuais (v1.2, verificadas 25/04/2026)
 
 ```
 Corpus EVERALDO_SANTAQUITERIA (vault piloto):
@@ -692,17 +738,18 @@ correlations:        29 (9 com confidence ≥ 0.70 + 1 CONTRACT_RENEGOTIATION)
 events:              0 (tabela existe no schema; ver ADR-006 sobre status)
 
 Código:
-Commits totais:      ~90+
-Tags publicadas:     14 versões + 10 safety checkpoints
-Testes passando:     643 (após Sessão 5 — narrator-flexible +24 novos)
-Arquivos Python:     ~55+
-Linhas de código:    ~8.300+
+Commits totais:      ~95+
+Tags publicadas:     15 versões + 11 safety checkpoints
+Testes passando:     698 (após Sessão 6 — resilient-pipeline +55 novos)
+Arquivos Python:     ~60+
+Linhas de código:    ~9.300+
 
-Custos acumulados até v1.1:
+Custos acumulados até v1.2:
 Desenvolvimento:     ~US$ 2.00
 Geração narrativas:  ~US$ 0.85 (Sessão 2 adversarial)
 Sessão 5 empírica:   ~US$ 0.31 (1 narrate API call em EVERALDO)
 Higiene + cleanup:   US$ 0.00 (puro código + docs)
+Sessão 6 (resiliência): US$ 0.00 (puro código + validação local)
 Total:               ~US$ 3.16 (≈ R$ 16)
 ```
 

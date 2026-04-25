@@ -125,11 +125,15 @@ limpa).
 
 ## Variáveis de ambiente
 
-- `ANTHROPIC_API_KEY` (obrigatória) — chave para o narrator Sonnet 4.6.
-- `OPENAI_API_KEY` (obrigatória) — Whisper local + GPT-4o-mini +
-  GPT-4o Vision.
-- `RDO_AGENT_MAX_TOKENS_OVERRIDE_<SCOPE>` (opcional) — sobrescreve o
-  `max_tokens` do narrator para um scope específico. Exemplo:
+### APIs externas (obrigatórias)
+
+- `ANTHROPIC_API_KEY` — chave para o narrator Sonnet 4.6.
+- `OPENAI_API_KEY` — Whisper local + GPT-4o-mini + GPT-4o Vision.
+
+### Narrator (opcionais — v1.1+)
+
+- `RDO_AGENT_MAX_TOKENS_OVERRIDE_<SCOPE>` — sobrescreve o
+  `max_tokens` do narrator para um scope específico:
 
   ```bash
   RDO_AGENT_MAX_TOKENS_OVERRIDE_OVERVIEW=20000 \
@@ -138,6 +142,51 @@ limpa).
 
   Valores default em `MAX_TOKENS_BY_SCOPE`: day=6144, week=8192,
   month=10240, overview/obra_overview=16384.
+
+### Resiliência (opcionais — v1.2+)
+
+Configuram `CircuitBreaker`, `RateLimiter` e `CostQuota` em
+`src/rdo_agent/observability/resilience.py`. Defaults conservadores
+funcionam pra desenvolvimento; ajustar em produção conforme limites
+reais das APIs:
+
+- `RDO_AGENT_CIRCUIT_FAILURE_THRESHOLD` (default `5`) — falhas
+  consecutivas até abrir o circuit.
+- `RDO_AGENT_CIRCUIT_RECOVERY_SEC` (default `300`) — segundos em
+  estado OPEN antes de tentar HALF_OPEN.
+- `RDO_AGENT_RATE_LIMIT_OPENAI_PER_MIN` (default `60`).
+- `RDO_AGENT_RATE_LIMIT_ANTHROPIC_PER_MIN` (default `20`).
+- `RDO_AGENT_DAILY_QUOTA_USD` (default `100.0`).
+
+## Pipeline state e logging (v1.2+)
+
+Wrapper sobre a tabela `tasks` (state machine do orchestrator desde
+Sprint 1, populada com ~675 jobs no vault piloto):
+
+```bash
+# Estado por (task_type, status), totais, e detecção de tasks
+# resumíveis (running sem finished_at = possível crash).
+rdo-agent pipeline-status --obra EVERALDO_SANTAQUITERIA
+
+# Recovery após crash:
+rdo-agent pipeline-reset --obra EVERALDO_SANTAQUITERIA --target running
+
+# Retry de falhas transientes:
+rdo-agent pipeline-reset --obra EVERALDO_SANTAQUITERIA --target failed \
+    [--task-type transcribe]
+```
+
+Logging JSONL emitido em `~/.rdo-agent/logs/<obra>/<YYYY-MM-DD>.jsonl`
+(quando o pipeline é instrumentado por `StructuredLogger`):
+
+```bash
+# Snapshot dos últimos N registros formatados:
+rdo-agent watch --obra EVERALDO_SANTAQUITERIA [--last 20] [--event-type cost]
+
+# Sumário agregado: counts por event_type, custo total por API,
+# duração por stage (min/median/max), falhas por stage e error_type:
+rdo-agent stats --obra EVERALDO_SANTAQUITERIA
+```
 
 ### Dependências de sistema (WeasyPrint / Laudo PDF)
 
@@ -192,9 +241,9 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.1-narrator-flexible`
+### Estado atual: `v1.2-resilient-pipeline`
 
-Última release de produto: `v1.1-narrator-flexible` (25/04/2026).
+Última release de produto: `v1.2-resilient-pipeline` (25/04/2026).
 
 - `v1.0.2` (higiene documental): docs alinhados com código (sem
   mudança de comportamento).
@@ -203,9 +252,13 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
   CSS Vestígio extra, pyMuPDF para validação, threshold adversarial).
 - `v1.1` (narrator flexível): streaming via flag `--stream`,
   `MAX_TOKENS` dinâmico por scope com override env, validator com
-  severity tiers (CRITICAL/WARNING/INFO + modo `strict`), detector novo
-  `CONTRACT_RENEGOTIATION` para identificar pares mensagem↔mensagem
-  com renegociação de valor sobre o mesmo escopo.
+  severity tiers, detector novo `CONTRACT_RENEGOTIATION`.
+- `v1.2` (pipeline resiliente): `PipelineStateManager` (wrapper sobre
+  tabela `tasks` — ADR-007) com CLI `pipeline-status` /
+  `pipeline-reset`, dedup defensivo de messages via `content_hash`,
+  logging JSONL estruturado em `~/.rdo-agent/logs/` com CLI `watch` /
+  `stats`, primitivas de resiliência (`CircuitBreaker`, `RateLimiter`,
+  `CostQuota`).
 
 Para roadmap completo e estado das sprints, ver:
 
