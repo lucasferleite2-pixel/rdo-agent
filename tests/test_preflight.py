@@ -151,7 +151,7 @@ def test_preflight_cost_breakdown_components(tmp_path):
     r = preflight_check(zp, vault_root=tmp_path)
     cb = r.cost
     assert isinstance(cb, CostBreakdown)
-    assert cb.transcribe_usd == 0.0  # Whisper local
+    assert cb.transcribe_usd == 0.0  # 0 áudios na fixture × $0.006/min = $0
     assert cb.classify_usd > 0
     assert cb.vision_usd > 0
     assert cb.narrator_usd > 0
@@ -160,6 +160,22 @@ def test_preflight_cost_breakdown_components(tmp_path):
     )
     # Bounds com margem 50%
     assert cb.lower_bound_usd < cb.total_usd < cb.upper_bound_usd
+
+
+def test_preflight_transcribe_cost_scales_with_audios(tmp_path):
+    """Whisper API custa $0.006/min — áudios geram custo proporcional (Sessao 11.0.1)."""
+    zp = _make_zip(
+        tmp_path / "audio.zip",
+        chat_txt_lines=["08/04/2026 09:00 - U: msg"],
+        audio_count=50,
+    )
+    r = preflight_check(zp, vault_root=tmp_path)
+    assert r.cost.transcribe_usd > 0, (
+        "transcribe_usd deve ser > 0 quando há áudios "
+        "(Whisper API, não Whisper local)"
+    )
+    expected = (r.audio_total_sec_est / 60) * 0.006
+    assert r.cost.transcribe_usd == pytest.approx(expected)
 
 
 def test_preflight_time_estimate_scales_with_audios(tmp_path):

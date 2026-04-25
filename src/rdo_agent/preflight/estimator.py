@@ -37,7 +37,12 @@ log = get_logger(__name__)
 
 @dataclass(frozen=True)
 class Rates:
-    # Whisper local (custo zero, mas tempo real)
+    # Whisper API (OpenAI whisper-1) — Sessão 11 / fix do bug:
+    # estimate originalmente assumia "Whisper local = $0", mas a
+    # discovery da Sessão 8 (P1) confirmou que `transcriber/` chama
+    # OpenAI Whisper API a $0.006/min (rate oficial). Subestimava
+    # custo real em $10+ em corpus de 1.6k+ minutos de áudio.
+    whisper_usd_per_audio_min: float = 0.006  # whisper-1 OpenAI
     whisper_seconds_per_audio_min: float = 30.0  # 30s para 1min de áudio
     # Classify (gpt-4o-mini)
     classify_usd_per_event: float = 5e-5  # ~ $0.05 por 1000 eventos
@@ -72,6 +77,10 @@ def _env_float(name: str, default: float) -> float:
 def _rates_from_env() -> Rates:
     """Permite override de qualquer rate via env vars."""
     return Rates(
+        whisper_usd_per_audio_min=_env_float(
+            "WHISPER_USD_PER_AUDIO_MIN",
+            DEFAULT_RATES.whisper_usd_per_audio_min,
+        ),
         whisper_seconds_per_audio_min=_env_float(
             "WHISPER_SEC_PER_AUDIO_MIN",
             DEFAULT_RATES.whisper_seconds_per_audio_min,
@@ -207,7 +216,7 @@ def _classify_zip_members(
 class CostBreakdown:
     """Estimativa de custo USD por estágio."""
 
-    transcribe_usd: float = 0.0  # Whisper local = 0 hoje
+    transcribe_usd: float = 0.0  # Whisper API ($0.006/min)
     classify_usd: float = 0.0
     vision_usd: float = 0.0
     narrator_usd: float = 0.0
@@ -384,8 +393,9 @@ def preflight_check(
         )
 
     # Cost — heurísticas simples
+    audio_minutes = report.audio_total_sec_est / 60
     report.cost = CostBreakdown(
-        transcribe_usd=0.0,  # Whisper local
+        transcribe_usd=audio_minutes * rates.whisper_usd_per_audio_min,
         classify_usd=(
             report.message_count_est
             * rates.classify_usd_per_event
@@ -462,7 +472,7 @@ def format_report_lines(report: PreflightReport) -> Iterable[str]:
     yield f"  Disco disponível:     {avail:.1f} GB  {sym}"
     yield ""
     yield "CUSTOS ESTIMADOS (±50%):"
-    yield f"  Transcribe (Whisper local): ${report.cost.transcribe_usd:.2f}"
+    yield f"  Transcribe (Whisper API):   ${report.cost.transcribe_usd:.2f}"
     yield f"  Classify (gpt-4o-mini):     ${report.cost.classify_usd:.2f}"
     yield f"  Vision (gpt-4o):            ${report.cost.vision_usd:.2f}"
     yield f"  Narrator (Sonnet):          ${report.cost.narrator_usd:.2f}"
