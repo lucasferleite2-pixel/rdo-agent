@@ -1536,5 +1536,126 @@ def pipeline_reset_cmd(obra: str, target: str, task_type: str | None) -> None:
         conn.close()
 
 
+@main.command(name="watch")
+@click.option("--obra", required=True, help="Identificador da obra (canal)")
+@click.option(
+    "--last", "last_n", default=20, type=int, show_default=True,
+    help="Quantos registros recentes mostrar.",
+)
+@click.option(
+    "--event-type", default=None,
+    help="Filtra por event_type (stage_start, stage_done, stage_failed, cost, retry).",
+)
+def watch_cmd(obra: str, last_n: int, event_type: str | None) -> None:
+    """
+    Mostra últimos N registros do logger JSONL (Sessão 6 / #53).
+
+    Lê de ``~/.rdo-agent/logs/<obra>/*.jsonl``. Sem follow-tail nesta
+    versão — print snapshot e sai.
+    """
+    from rdo_agent.observability import iter_log_records
+
+    records = list(iter_log_records(obra))
+    if event_type:
+        records = [r for r in records if r.get("event_type") == event_type]
+
+    if not records:
+        console.print(f"[dim](sem registros para corpus={obra}"
+                      f"{f' event_type={event_type}' if event_type else ''})[/dim]")
+        return
+
+    tail = records[-last_n:]
+    table = Table(title=f"Logger JSONL — obra {obra} (últimos {len(tail)})")
+    table.add_column("timestamp", style="dim")
+    table.add_column("event", style="cyan")
+    table.add_column("detalhe")
+
+    for r in tail:
+        ts = r.get("timestamp", "")
+        et = r.get("event_type", "")
+        detail_parts = []
+        for k, v in r.items():
+            if k in ("timestamp", "corpus_id", "event_type"):
+                continue
+            detail_parts.append(f"{k}={v}")
+        table.add_row(ts, et, " ".join(detail_parts))
+
+    console.print(table)
+
+
+@main.command(name="stats")
+@click.option("--obra", required=True, help="Identificador da obra (canal)")
+def stats_cmd(obra: str) -> None:
+    """
+    Sumariza logs JSONL — counts, custo, falhas (Sessão 6 / #53).
+    """
+    from rdo_agent.observability import aggregate_logs
+
+    agg = aggregate_logs(obra)
+    if agg.total_records == 0:
+        console.print(
+            f"[dim](sem registros JSONL para corpus={obra}; "
+            "pipeline pode ainda nao ter sido instrumentado)[/dim]"
+        )
+        return
+
+    console.print(
+        f"[bold]Stats — corpus {obra}[/bold]  "
+        f"({agg.total_records} registros total)"
+    )
+
+    # Counts por event_type
+    t1 = Table(title="Counts por event_type")
+    t1.add_column("event_type", style="cyan")
+    t1.add_column("count", justify="right")
+    for et, n in sorted(agg.event_counts.items(), key=lambda kv: -kv[1]):
+        t1.add_row(et, str(n))
+    console.print(t1)
+
+    # Custo
+    if agg.total_cost_usd > 0:
+        t2 = Table(title="Custo agregado (USD)")
+        t2.add_column("api", style="cyan")
+        t2.add_column("cost_usd", justify="right", style="green")
+        for api, cost in sorted(agg.cost_by_api.items(), key=lambda kv: -kv[1]):
+            t2.add_row(api, f"${cost:.4f}")
+        t2.add_section()
+        t2.add_row("[bold]TOTAL[/bold]", f"[bold]${agg.total_cost_usd:.4f}[/bold]")
+        console.print(t2)
+
+    # Duracoes por stage
+    if agg.durations_by_stage_ms:
+        t3 = Table(title="Duração por stage (ms)")
+        t3.add_column("stage", style="cyan")
+        t3.add_column("n", justify="right")
+        t3.add_column("min", justify="right")
+        t3.add_column("median", justify="right")
+        t3.add_column("max", justify="right")
+        for stage, durs in sorted(agg.durations_by_stage_ms.items()):
+            durs_sorted = sorted(durs)
+            n = len(durs_sorted)
+            mn = durs_sorted[0]
+            mx = durs_sorted[-1]
+            mid = durs_sorted[n // 2]
+            t3.add_row(stage, str(n), str(mn), str(mid), str(mx))
+        console.print(t3)
+
+    # Falhas
+    if agg.failures_by_stage:
+        t4 = Table(title="Falhas")
+        t4.add_column("stage", style="cyan")
+        t4.add_column("count", justify="right", style="red")
+        for stage, n in sorted(agg.failures_by_stage.items(), key=lambda kv: -kv[1]):
+            t4.add_row(stage, str(n))
+        console.print(t4)
+        if agg.error_types:
+            t5 = Table(title="Por error_type")
+            t5.add_column("error_type", style="cyan")
+            t5.add_column("count", justify="right", style="red")
+            for et, n in sorted(agg.error_types.items(), key=lambda kv: -kv[1]):
+                t5.add_row(et, str(n))
+            console.print(t5)
+
+
 if __name__ == "__main__":
     main()
