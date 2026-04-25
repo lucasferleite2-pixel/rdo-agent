@@ -307,7 +307,7 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-### Estado atual: `v1.5-efficient-vision`
+### Estado atual: `v1.6-scale-analytics`
 
 Última release de produto: `v1.4-efficient-classify` (25/04/2026).
 
@@ -326,15 +326,19 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
   léxico (sem deps novas), `BatchClassifier` para OpenAI Batch
   API (50% desconto). ADR-008; dívida #59 registrada.
 - `v1.5` (eficiência custo visual): vision cascade 4 camadas
-  — `HeuristicImageFilter` (modos conservative/aggressive),
-  `PerceptualHashDedup` (`imagehash>=4.3`, ~100MB vs ~2GB de
-  torch), `RoutingClassifier` (aspect ratio + Tesseract bbox),
-  Vision API com circuit breaker `openai_vision`. Promove
-  `scripts/extract_video_frames.py` para `src/rdo_agent/video/`
-  com integração StructuredLogger. `OCRRouter` coordena os 3
-  módulos OCR via Tesseract com fail-open. ADR-009 trava
-  rationale; dívida #60 registrada (CLIP futuro). **Fim do
-  GRUPO 3 (eficiência) do roadmap reformulado.**
+  — `HeuristicImageFilter`, `PerceptualHashDedup` (`imagehash`),
+  `RoutingClassifier` (aspect ratio + Tesseract), Vision API
+  com circuit breaker próprio. Promove video script para
+  `src/rdo_agent/video/`. `OCRRouter`. ADR-009. Dívida #60
+  registrada. **Fim do GRUPO 3.**
+- `v1.6` (escala analítica): correlator paralelo (4 workers
+  ProcessPool) com janela by-detector configurável; narrator
+  hierárquico cascade `day → week → month → overview` com
+  migration relax CHECK e file_ids preservation; cache binário
+  de narrativas (`prompt_template_hash + dossier_hash`) +
+  `invalidate` cirúrgico. ADRs 010/011/012; dívidas #61/#62/#63
+  registradas com triggers. **GRUPO 4 parcial — Sessão 11
+  valida em corpus grande.**
 
 Para roadmap completo e estado das sprints, ver:
 
