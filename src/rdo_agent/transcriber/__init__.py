@@ -470,6 +470,159 @@ def transcribe_handler(task: Task, conn: sqlite3.Connection) -> str | None:
     return txt_file_id
 
 
+def transcribe_pending(
+    conn: sqlite3.Connection,
+    obra: str,
+    *,
+    max_audios: int | None = None,
+    force: bool = False,
+    on_skip=None,
+    on_done=None,
+    on_fail=None,
+) -> dict[str, int]:
+    """
+    Loop de orquestração — Sessão 8 / dívida #45.
+
+    Drena tasks ``TRANSCRIBE`` pendentes e despacha pra
+    :func:`transcribe_handler`, integrado com a infra do GRUPO 2:
+
+    - **PipelineStateManager** (Sessão 6) — claim/complete/fail
+      atômicos, recuperáveis via ``reset_running``.
+    - **StructuredLogger** (Sessão 6) — emite ``stage_start``,
+      ``stage_done``, ``stage_failed`` e ``cost_event`` por áudio.
+    - **CostQuota** (Sessão 6) — bloqueia se total acumulado de
+      transcribe ultrapassar quota diária.
+    - **CircuitBreaker** ``openai_whisper`` (Sessão 6) — pausa
+      quando OpenAI Whisper API der falhas consecutivas.
+
+    Idempotência: cada áudio tem ``file_id`` determinístico
+    (``sha256[:12]``). Se já existe transcrição para esse ``file_id``
+    e ``force=False``, pula sem chamar Whisper (poupando $0.006/min
+    real). ``force=True`` ainda usa o guardrail interno do
+    transcribe_handler (que só insere se transcriptions estiver
+    vazio para o file_id) — caller que quiser retranscrever de
+    verdade precisa apagar a row primeiro (não é responsabilidade
+    deste loop).
+
+    Args:
+        conn: SQLite com tasks/transcriptions já populadas.
+        obra: identificador do canal/corpus.
+        max_audios: ``None`` = drenar tudo. Caso útil em testes.
+        force: ``True`` ignora idempotência (re-claim). Default
+            ``False`` skipa áudios já transcritos.
+        on_skip / on_done / on_fail: callbacks opcionais para teste/
+            UI; recebem ``(file_id, ctx_dict)``.
+
+    Returns:
+        dict com ``processed`` / ``skipped`` / ``failed`` counts.
+    """
+    from rdo_agent.observability import (
+        CircuitOpenError,
+        CostQuota,
+        QuotaExceededError,
+        StructuredLogger,
+    )
+    from rdo_agent.observability.resilience import get_openai_whisper_circuit
+    from rdo_agent.orchestrator import TaskType
+    from rdo_agent.pipeline_state import PipelineStateManager
+
+    state = PipelineStateManager(conn)
+    logger = StructuredLogger(obra)
+    quota = CostQuota(corpus_id=obra)
+    breaker = get_openai_whisper_circuit()
+
+    counts = {"processed": 0, "skipped": 0, "failed": 0}
+    cumulative_cost_usd = 0.0
+
+    while True:
+        if max_audios is not None and (
+            counts["processed"] + counts["skipped"] + counts["failed"]
+        ) >= max_audios:
+            break
+
+        task = state.claim(obra, task_type=TaskType.TRANSCRIBE)
+        if task is None:
+            break
+
+        file_id = task.payload.get("file_id", "")
+
+        # Idempotência: já transcrito? (usa column transcriptions.file_id)
+        if not force:
+            existing = conn.execute(
+                "SELECT id FROM transcriptions WHERE file_id = ?",
+                (file_id,),
+            ).fetchone()
+            if existing is not None:
+                state.complete(task.id, result_ref=str(existing[0]))
+                logger.emit(
+                    "transcribe_skipped",
+                    file_id=file_id, reason="already_done",
+                )
+                counts["skipped"] += 1
+                if on_skip:
+                    on_skip(file_id, {"existing_id": existing[0]})
+                continue
+
+        # Quota
+        try:
+            quota.check_or_raise(cumulative_cost_usd)
+        except QuotaExceededError as e:
+            state.fail(task.id, f"quota: {e}")
+            logger.stage_failed(
+                "transcribe", file_id, "quota_exceeded", str(e),
+            )
+            counts["failed"] += 1
+            break  # próxima execução pode retentar
+
+        logger.stage_start("transcribe", file_id)
+        t0 = time.time()
+        try:
+            result_ref = breaker.call(transcribe_handler, task, conn)
+        except CircuitOpenError as e:
+            state.fail(task.id, f"circuit: {e}")
+            logger.stage_failed(
+                "transcribe", file_id, "circuit_open", str(e),
+            )
+            counts["failed"] += 1
+            break  # circuit aberto: não adianta tentar próximo
+        except Exception as e:
+            duration_ms = int((time.time() - t0) * 1000)
+            error_type = _classify_error_type(e)
+            state.fail(task.id, str(e))
+            logger.stage_failed(
+                "transcribe", file_id, error_type, str(e),
+                duration_ms=duration_ms,
+            )
+            counts["failed"] += 1
+            if on_fail:
+                on_fail(file_id, {"error_type": error_type, "error": str(e)})
+            continue
+
+        duration_ms = int((time.time() - t0) * 1000)
+        # Recupera api_call_id e cost_usd da row inserida em api_calls
+        last = conn.execute(
+            "SELECT id, cost_usd FROM api_calls "
+            "WHERE obra = ? AND endpoint = 'audio.transcriptions' "
+            "ORDER BY id DESC LIMIT 1",
+            (obra,),
+        ).fetchone()
+        cost_usd = float(last[1] or 0.0) if last is not None else 0.0
+        cumulative_cost_usd += cost_usd
+
+        state.complete(task.id, result_ref=result_ref)
+        logger.cost_event(
+            api="openai", model=MODEL,
+            tokens_in=0, tokens_out=0, cost_usd=cost_usd,
+            stage="transcribe", file_id=file_id,
+        )
+        logger.stage_done("transcribe", file_id, duration_ms)
+        counts["processed"] += 1
+        if on_done:
+            on_done(file_id, {"cost_usd": cost_usd, "duration_ms": duration_ms})
+
+    return counts
+
+
 __all__ = [
     "COST_USD_PER_MINUTE",
     "LANGUAGE",
@@ -478,4 +631,5 @@ __all__ = [
     "TEMPERATURE",
     "transcribe_audio",
     "transcribe_handler",
+    "transcribe_pending",
 ]

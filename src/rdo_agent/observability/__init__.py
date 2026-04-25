@@ -27,6 +27,11 @@ from rdo_agent.observability.resilience import (
     CostQuota,
     QuotaExceededError,
     RateLimiter,
+    get_anthropic_circuit,
+    get_anthropic_rate_limiter,
+    get_openai_circuit,
+    get_openai_rate_limiter,
+    get_openai_whisper_circuit,
 )
 
 __all__ = [
@@ -39,4 +44,9 @@ __all__ = [
     "CostQuota",
     "QuotaExceededError",
     "RateLimiter",
+    "get_anthropic_circuit",
+    "get_anthropic_rate_limiter",
+    "get_openai_circuit",
+    "get_openai_rate_limiter",
+    "get_openai_whisper_circuit",
 ]
