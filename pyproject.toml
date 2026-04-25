@@ -62,6 +62,11 @@ dev = [
     "ipython>=8.18.0",
     # Geração de PDFs sintéticos para fixtures (Sprint 2 §Fase 1)
     "reportlab>=4.0",
+    # Extração tolerante de texto de laudos Vestígio para validação
+    # (Sessão 4 / dívida #37). Não substitui pdfplumber em
+    # document_extractor — pyMuPDF é apenas a convenção para testes
+    # de validação de PDFs gerados (laudo).
+    "pymupdf>=1.24",
 ]
 
 [project.scripts]
