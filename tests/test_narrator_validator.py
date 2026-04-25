@@ -311,3 +311,84 @@ def test_validate_no_financial_records_valores_passes_vacuously():
     assert result["checks"]["valores_preservados"] is True
     assert result["checks"]["nomes_preservados"] is True
     assert result["passed"] is True
+
+
+# ---------------------------------------------------------------------------
+# file_ids threshold por modo (Sessão 4 · dívida #33)
+# ---------------------------------------------------------------------------
+
+
+def _dossier_5_file_ids() -> dict:
+    """Dossier com 5 file_ids, sem PIX (sem critical sobre BRL/horario)."""
+    return {
+        "obra": "O", "scope": "day", "scope_ref": "2026-04-06",
+        "events_timeline": [
+            {
+                "id": f"c_{i}", "hora_brasilia": "09:00",
+                "file_id": f"m_evid_{i:02d}",
+                "source_type": "text_message",
+                "primary_category": "cronograma",
+                "secondary_categories": [],
+                "content_preview": "x", "content_full": "x",
+            }
+            for i in range(1, 6)
+        ],
+        "financial_records": [],
+        "context_hints": {},
+    }
+
+
+def test_validator_file_ids_threshold_normal_mode_50pct():
+    """
+    Modo padrão (sem prompt_version): threshold 50%. Narrativa que cita
+    apenas 40% (2 de 5) deve falhar o soft check.
+    """
+    narrative = (
+        "# Narrativa: x\n\n"
+        "Às 09:00 evidência m_evid_01 registrada e m_evid_02 também. "
+        + ("contexto adicional. " * 30)
+        + "\n\n---\n"
+    )
+    result = validate_narrative(
+        narrative, _dossier_5_file_ids(), {"confidence": 0.8}, narrative,
+    )
+    assert result["checks"]["file_ids_preservados"] is False
+    assert any("40%" in w or "esperado >=50%" in w for w in result["warnings"])
+
+
+def test_validator_file_ids_threshold_adversarial_mode_30pct():
+    """
+    Modo adversarial: threshold 30%. Narrativa com mesmos 40% que falhava
+    no padrão agora passa, porque contestações citam evidência limitada
+    por construção (#33).
+    """
+    narrative = (
+        "# Narrativa: x\n\n"
+        "Às 09:00 evidência m_evid_01 registrada e m_evid_02 também. "
+        + ("contexto adicional. " * 30)
+        + "\n\n---\n"
+    )
+    result = validate_narrative(
+        narrative, _dossier_5_file_ids(), {"confidence": 0.8}, narrative,
+        prompt_version="narrator_v4_adversarial",
+    )
+    assert result["checks"]["file_ids_preservados"] is True
+
+
+def test_validator_file_ids_threshold_adversarial_still_fails_below_30pct():
+    """
+    Threshold relaxado em adversarial não é "qualquer coisa passa": 0%
+    de cobertura ainda falha (warning é informação útil).
+    """
+    narrative = (
+        "# Narrativa: x\n\n"
+        "Texto sem citar nenhum file_id. "
+        + ("contexto adicional. " * 30)
+        + "\n\n---\n"
+    )
+    result = validate_narrative(
+        narrative, _dossier_5_file_ids(), {"confidence": 0.8}, narrative,
+        prompt_version="narrator_v4_adversarial",
+    )
+    assert result["checks"]["file_ids_preservados"] is False
+    assert any("0/5" in w or "0%" in w for w in result["warnings"])

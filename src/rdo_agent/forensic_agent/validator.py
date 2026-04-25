@@ -143,19 +143,31 @@ def _check_nomes_preservados(
 
 
 def _check_file_ids_preservados(
-    narrative: str, dossier: dict,
+    narrative: str, dossier: dict, prompt_version: str | None = None,
 ) -> tuple[bool, list[str]]:
-    """Soft: ao menos 50% dos file_ids devem aparecer."""
+    """
+    Soft: ao menos N% dos file_ids devem aparecer.
+
+    Threshold é 50% no modo padrão. Em modo **adversarial** o
+    threshold cai para 30%, porque a seção "Contestações Hipotéticas"
+    da narrativa V4 cita evidências limitadas por construção (cada
+    contestação aponta a uma ou duas peças), o que naturalmente reduz
+    a cobertura de file_ids sem indicar problema de qualidade
+    (#33 — falso warning evitado).
+    """
     timeline = dossier.get("events_timeline") or []
     fids = [e.get("file_id") for e in timeline if e.get("file_id")]
     if not fids:
         return True, []
     found = sum(1 for f in fids if f in narrative)
     ratio = found / len(fids)
-    if ratio < 0.5:
+    is_adversarial = bool(prompt_version) and "adversarial" in prompt_version
+    threshold = 0.3 if is_adversarial else 0.5
+    if ratio < threshold:
         return False, [
             f"apenas {found}/{len(fids)} file_ids ({ratio*100:.0f}%) "
-            "aparecem em narrativa"
+            f"aparecem em narrativa (esperado >={threshold*100:.0f}%"
+            + (", adversarial)" if is_adversarial else ")")
         ]
     return True, []
 
@@ -213,6 +225,7 @@ def validate_narrative(
     dossier: dict,
     self_assessment: dict | None = None,
     full_narrative: str | None = None,
+    prompt_version: str | None = None,
 ) -> dict[str, Any]:
     """
     Valida narrativa vs dossier. Retorna dict com:
@@ -226,6 +239,9 @@ def validate_narrative(
         self_assessment: dict parseado do bloco JSON
         full_narrative: markdown completo (body + bloco) — se None,
             usa narrative_body para checks de abertura/fechamento
+        prompt_version: versão do prompt usada (ex: 'narrator_v4_adversarial').
+            Quando 'adversarial' aparece no nome, o threshold de
+            file_ids_preservados é relaxado (#33).
     """
     full = full_narrative if full_narrative is not None else narrative_body
     self_assessment = self_assessment or {}
@@ -251,7 +267,7 @@ def validate_narrative(
     warnings.extend(w)
 
     # Soft
-    ok, w = _check_file_ids_preservados(full, dossier)
+    ok, w = _check_file_ids_preservados(full, dossier, prompt_version)
     checks["file_ids_preservados"] = ok
     warnings.extend(w)
 

@@ -990,6 +990,7 @@ def narrate_cmd(
         validation = validate_narrative(
             narration.markdown_body, dossier,
             narration.self_assessment, narration.markdown_text,
+            prompt_version=narration.prompt_version,
         )
 
         narrative_id, path, was_cached = save_narrative(
