@@ -29,6 +29,7 @@ class CorrelationType(StrEnum):
     MATH_VALUE_MATCH = "MATH_VALUE_MATCH"
     MATH_INSTALLMENT_MATCH = "MATH_INSTALLMENT_MATCH"
     MATH_VALUE_DIVERGENCE = "MATH_VALUE_DIVERGENCE"
+    CONTRACT_RENEGOTIATION = "CONTRACT_RENEGOTIATION"  # Sessão 5 · #27
 
 
 # Thresholds de exibicao — persistencia salva todos strengths.

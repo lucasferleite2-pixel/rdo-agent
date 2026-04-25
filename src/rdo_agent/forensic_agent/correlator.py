@@ -66,6 +66,9 @@ def detect_correlations(
     pacote detectors re-exporta estes nomes).
     """
     # Import lazy: detectors -> _common -> correlator (Correlation).
+    from rdo_agent.forensic_agent.detectors.contract_renegotiation import (
+        detect_contract_renegotiation,
+    )
     from rdo_agent.forensic_agent.detectors.math import (
         detect_math_relations,
     )
@@ -80,6 +83,9 @@ def detect_correlations(
     out.extend(detect_temporal_payment_context(conn, obra))
     out.extend(detect_semantic_payment_scope(conn, obra))
     out.extend(detect_math_relations(conn, obra))
+    # Sessão 5 / #27: roda DEPOIS — detector mensagem↔mensagem que
+    # complementa o triplet base (que correlaciona com financial_records).
+    out.extend(detect_contract_renegotiation(conn, obra))
 
     if persist:
         for c in out:
