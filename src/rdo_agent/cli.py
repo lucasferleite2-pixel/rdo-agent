@@ -222,11 +222,21 @@ def _process_with_progress(
     mesmas invariantes (next_pending → mark_running → handler → mark_done/
     failed) e respeita a ordenação do orchestrator.
 
+    Sessao 11.0.5: integra StructuredLogger.cost_event (após handler)
+    e CostQuota.check_or_raise (antes de cada iteração) para cobrir
+    classify/ocr-images/detect-quality/process. Vision continua sendo
+    drenada pelo process-visual com sua própria infra.
+
     Returns:
         (done, failed, cost_total_usd, avg_latency_ms, interrupted)
     """
     import traceback
 
+    from rdo_agent.observability import (
+        CostQuota,
+        QuotaExceededError,
+        StructuredLogger,
+    )
     from rdo_agent.orchestrator import (
         init_db,
         mark_done,
@@ -235,6 +245,8 @@ def _process_with_progress(
     )
 
     state = {"interrupted": False}
+    logger = StructuredLogger(obra)
+    quota = CostQuota(corpus_id=obra)
 
     def _handle_sigint(_signum, _frame):
         state["interrupted"] = True
@@ -295,6 +307,16 @@ def _process_with_progress(
                     break
                 assert task.id is not None
 
+                # Quota antes de despachar — bloqueia se acumulado > teto.
+                try:
+                    quota.check_or_raise(_cost())
+                except QuotaExceededError as exc:
+                    console.print(
+                        f"[red]✗ quota excedida:[/red] {exc} — abortando"
+                    )
+                    state["interrupted"] = True
+                    break
+
                 mark_running(conn, task.id)
                 handler = handlers.get(task.task_type)
                 if handler is None:
@@ -306,6 +328,8 @@ def _process_with_progress(
                     )
                     continue
 
+                cost_before = _cost()
+                logger.stage_start(task.task_type.value, task.id)
                 try:
                     t0 = time.monotonic()
                     result_ref = handler(task, conn)
@@ -313,9 +337,27 @@ def _process_with_progress(
                     mark_done(conn, task.id, result_ref=result_ref)
                     done += 1
                     total_latency_ms += latency_ms
+                    cost_delta = max(0.0, _cost() - cost_before)
+                    if cost_delta > 0:
+                        logger.cost_event(
+                            api="openai", model="(handler)",
+                            tokens_in=0, tokens_out=0,
+                            cost_usd=cost_delta,
+                            stage=task.task_type.value, task_id=task.id,
+                        )
+                    logger.stage_done(
+                        task.task_type.value, task.id, latency_ms,
+                        cost_usd=cost_delta,
+                    )
                 except Exception as exc:
+                    latency_ms = int((time.monotonic() - t0) * 1000)
                     mark_failed(conn, task.id, traceback.format_exc())
                     failed += 1
+                    logger.stage_failed(
+                        task.task_type.value, task.id,
+                        type(exc).__name__, str(exc)[:200],
+                        duration_ms=latency_ms,
+                    )
                     console.print(
                         f"[red]✗ task {task.id} "
                         f"({task.task_type.value}) falhou:[/red] "
@@ -1033,6 +1075,16 @@ def narrate_cmd(
         # descartada), reporta cost 0 pra nao inflar acumulado.
         effective_cost = 0.0 if was_cached else narration.cost_usd
         total_cost += effective_cost
+        if effective_cost > 0:
+            from rdo_agent.observability import StructuredLogger as _SL
+            _SL(obra).cost_event(
+                api="anthropic",
+                model=narration.model,
+                tokens_in=narration.prompt_tokens,
+                tokens_out=narration.completion_tokens,
+                cost_usd=effective_cost,
+                stage="narrate", scope=sc, ref=ref,
+            )
 
         results_summary.append({
             "scope": sc, "ref": ref, "cached": was_cached,
@@ -1190,10 +1242,21 @@ def extract_gt_cmd(
     "--sample", "sample_n", type=int, default=5,
     help="Quantidade de correlacoes exibidas como amostra (default 5).",
 )
-def correlate_cmd(obra: str, rebuild: bool, sample_n: int) -> None:
+@click.option(
+    "--workers", type=int, default=None,
+    help="Sessao 10 (#50): paraleliza os 4 detectores via ProcessPool. "
+         "Default: sequencial. Use 4 em corpus grande (>10k mensagens).",
+)
+def correlate_cmd(
+    obra: str, rebuild: bool, sample_n: int, workers: int | None,
+) -> None:
     """
-    Roda detectores rule-based (temporal/semantic/math) e persiste
-    correlacoes. Zero chamadas a API externa.
+    Roda detectores rule-based (temporal/semantic/math/contract_renegotiation)
+    e persiste correlacoes. Zero chamadas a API externa.
+
+    Com --workers N, despacha cada detector em processo separado
+    (Sessao 10 / #50). Em corpus pequeno (<1k mensagens) o overhead
+    de spawn supera o ganho — preferir sequencial.
     """
     from collections import Counter
 
@@ -1201,6 +1264,7 @@ def correlate_cmd(obra: str, rebuild: bool, sample_n: int) -> None:
         delete_correlations_for_obra,
         detect_correlations,
     )
+    from rdo_agent.forensic_agent.parallel import parallel_detect_correlations
     from rdo_agent.orchestrator import init_db
 
     vault_path = config.get().vault_path(obra)
@@ -1218,7 +1282,21 @@ def correlate_cmd(obra: str, rebuild: bool, sample_n: int) -> None:
             )
 
         t0 = time.monotonic()
-        correlations = detect_correlations(conn, obra, persist=True)
+        if workers and workers > 1:
+            conn.close()
+            console.print(
+                f"[bold cyan]Modo paralelo:[/bold cyan] {workers} workers"
+            )
+            correlations, stats = parallel_detect_correlations(
+                db_path, obra, workers=workers, persist=True,
+            )
+            for det, n in sorted(stats.by_detector.items()):
+                console.print(f"  [dim]{det}:[/dim] {n}")
+            for det, err in stats.errors_by_detector.items():
+                console.print(f"  [red]{det} falhou:[/red] {err}")
+            conn = init_db(vault_path)
+        else:
+            correlations = detect_correlations(conn, obra, persist=True)
         elapsed = time.monotonic() - t0
 
         if not correlations:
