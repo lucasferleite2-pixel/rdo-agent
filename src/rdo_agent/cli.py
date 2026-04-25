@@ -1706,5 +1706,112 @@ def estimate_cmd(zip_path: Path, vault_root: Path | None) -> None:
         sys.exit(3)
 
 
+@main.command(name="transcribe-pending")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option(
+    "--max", "max_audios", type=int, default=None,
+    help="Máximo de áudios a processar (default: todos)",
+)
+@click.option(
+    "--force", is_flag=True, default=False,
+    help="Re-claim mesmo de áudios já transcritos (idempotência interna ainda protege)",
+)
+def transcribe_pending_cmd(
+    obra: str, max_audios: int | None, force: bool,
+) -> None:
+    """
+    Drena tasks TRANSCRIBE pendentes via Whisper API (Sessão 8 / #45).
+
+    Integra com PipelineStateManager, StructuredLogger, CostQuota
+    e CircuitBreaker openai_whisper. Idempotente: pula áudios com
+    transcrição já gravada (a menos que --force).
+    """
+    from rdo_agent.orchestrator import init_db
+    from rdo_agent.transcriber import transcribe_pending
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = init_db(vault_path)
+    console.print(f"[bold cyan]Transcribe-pending:[/bold cyan] {obra}")
+    if max_audios:
+        console.print(f"[bold cyan]Max:[/bold cyan] {max_audios}")
+    if force:
+        console.print("[yellow]Force=True — ignora idempotência inicial[/yellow]")
+
+    try:
+        counts = transcribe_pending(
+            conn, obra, max_audios=max_audios, force=force,
+        )
+    finally:
+        conn.close()
+
+    summary = Table(title="Resumo transcribe-pending", show_header=False)
+    summary.add_column("metrica", style="cyan", no_wrap=True)
+    summary.add_column("valor", style="bold")
+    summary.add_row("processed", f"[green]{counts['processed']}[/green]")
+    summary.add_row("skipped", f"[dim]{counts['skipped']}[/dim]")
+    summary.add_row(
+        "failed",
+        f"[red]{counts['failed']}[/red]" if counts["failed"] else "0",
+    )
+    console.print("")
+    console.print(summary)
+    if counts["failed"] > 0:
+        sys.exit(1)
+
+
+@main.command(name="process-videos")
+@click.option("--obra", required=True, help="Identificador da obra")
+@click.option(
+    "--max", "max_videos", type=int, default=None,
+    help="Máximo de vídeos a processar (default: todos)",
+)
+def process_videos_cmd(obra: str, max_videos: int | None) -> None:
+    """
+    Extrai 5 frames por vídeo via ffmpeg (Sessão 9 / #48).
+
+    Frames extraídos em t={5%, 25%, 50%, 75%, 95%} da duração.
+    Pula vídeos que já têm frames (idempotência por
+    media_derivations). Sem chamadas a API externa.
+    """
+    from rdo_agent.orchestrator import init_db
+    from rdo_agent.video import process_videos_pending
+
+    vault_path = config.get().vault_path(obra)
+    db_path = vault_path / "index.sqlite"
+    if not db_path.exists():
+        console.print(f"[red]x banco nao encontrado:[/red] {db_path}")
+        sys.exit(1)
+
+    conn = init_db(vault_path)
+    console.print(f"[bold cyan]Process-videos:[/bold cyan] {obra}")
+    if max_videos:
+        console.print(f"[bold cyan]Max:[/bold cyan] {max_videos}")
+
+    try:
+        counts = process_videos_pending(
+            conn, obra, max_videos=max_videos,
+        )
+    finally:
+        conn.close()
+
+    summary = Table(title="Resumo process-videos", show_header=False)
+    summary.add_column("metrica", style="cyan", no_wrap=True)
+    summary.add_column("valor", style="bold")
+    summary.add_row("processed", f"[green]{counts['processed']}[/green]")
+    summary.add_row(
+        "failed",
+        f"[red]{counts['failed']}[/red]" if counts["failed"] else "0",
+    )
+    console.print("")
+    console.print(summary)
+    if counts["failed"] > 0:
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     main()
