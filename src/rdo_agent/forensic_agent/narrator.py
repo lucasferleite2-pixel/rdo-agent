@@ -36,6 +36,7 @@ from rdo_agent.forensic_agent.prompts import (
     NARRATOR_SYSTEM_PROMPT_V4_ADVERSARIAL,
     NARRATOR_USER_TEMPLATE,
 )
+from rdo_agent.forensic_agent.text_utils import strip_emoji
 from rdo_agent.utils import config
 from rdo_agent.utils.hashing import sha256_text
 from rdo_agent.utils.logging import get_logger
@@ -395,6 +396,19 @@ def narrate(
     cost = _compute_cost_usd(pt, ct, MODEL)
 
     self_assessment, body = _extract_self_assessment(text)
+
+    # Defesa de brandbook (#40): brandbook Vestígio proíbe emoji em
+    # narrativa forense. Prompt já pede "sem emoji", mas o modelo
+    # eventualmente fura — strip antes de persistir e logar warning
+    # para sinalizar que o prompt pode precisar de ajuste.
+    body, n_emojis_body = strip_emoji(body)
+    text, n_emojis_text = strip_emoji(text)
+    if n_emojis_body or n_emojis_text:
+        log.warning(
+            "strip_emoji: %d removidos do body, %d do markdown completo "
+            "(scope=%s, prompt_version=%s) — considere ajustar o prompt",
+            n_emojis_body, n_emojis_text, scope, prompt_version,
+        )
 
     is_malformed = not self_assessment
     reason = "missing_self_assessment_block" if is_malformed else None

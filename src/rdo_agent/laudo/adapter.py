@@ -25,6 +25,7 @@ from typing import Any
 
 import markdown as _md_lib
 
+from rdo_agent.forensic_agent.text_utils import strip_emoji
 from rdo_agent.laudo.vestigio_laudo import (
     Correlacao,
     EventoCronologia,
@@ -478,6 +479,9 @@ def _markdown_to_html(text: str) -> str:
     """
     if not text:
         return ""
+    # Defesa contra brandbook (#40): narrativas legacy podem conter emoji
+    # que escapou da geração; strip aqui é rede de segurança para o laudo.
+    text, _ = strip_emoji(text)
     escaped = _html_lib.escape(text.strip(), quote=False)
     html = _MD.reset().convert(escaped)
     for src, dst in _HEADING_DOWNSHIFT:

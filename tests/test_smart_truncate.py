@@ -1,7 +1,10 @@
-"""Testes de smart_truncate (Sessao 4, divida #36).
+"""Testes de smart_truncate (Sessao 4, divida #36) e strip_emoji
+(Sessao 4, divida #40).
 
-Cobre os 4 boundaries (paragrafo, frase, palavra, hard) e o no-op
-quando texto cabe no limite.
+Cobre:
+  - 4 boundaries (paragrafo, frase, palavra, hard) + no-op + log
+  - strip_emoji em emojis basicos, preservacao de PT-BR, contagem,
+    edge cases
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ import pytest
 from rdo_agent.forensic_agent.text_utils import (
     TRUNCATION_MARKER,
     smart_truncate,
+    strip_emoji,
 )
 
 
@@ -99,3 +103,79 @@ def test_smart_truncate_max_chars_too_small_raises():
 def test_smart_truncate_marker_value():
     """Marker e exatamente o esperado (string conhecida)."""
     assert TRUNCATION_MARKER == "\n\n[truncado por limite]"
+
+
+# ============================================================
+# strip_emoji  (Sessao 4 · divida #40)
+# ============================================================
+
+
+def test_strip_emoji_basic():
+    """Emojis basicos sao removidos."""
+    text = "Reuniao com cliente 😀 fechou bem 🎉👍"
+    cleaned, n = strip_emoji(text)
+    assert "😀" not in cleaned
+    assert "🎉" not in cleaned
+    assert "👍" not in cleaned
+    assert "Reuniao com cliente" in cleaned
+    assert "fechou bem" in cleaned
+    assert n >= 1  # pelo menos 1 sequencia detectada
+
+
+def test_strip_emoji_preserves_unicode_text():
+    """Acentos PT-BR, c-cedilha, n-til ficam intactos."""
+    text = "Acordo verbal: cronograma apertado, executar até quinta. Pendência: prazo do irmão."
+    cleaned, n = strip_emoji(text)
+    assert n == 0
+    assert cleaned == text
+    # Caracteres especificos preservados
+    for char in "áéíóúâêôãõàçñ":
+        # nao todos aparecem no texto, mas o ponto eh testar individualmente
+        cleaned2, _ = strip_emoji(char)
+        assert cleaned2 == char
+
+
+def test_strip_emoji_returns_count():
+    """Counter retorna numero de sequencias removidas (nao caracteres)."""
+    text = "a 🎉🎊 b 👍 c"
+    cleaned, n = strip_emoji(text)
+    assert cleaned == "a  b  c"
+    # 2 sequencias contiguas: '🎉🎊' (1) + '👍' (1)
+    assert n == 2
+
+
+def test_strip_emoji_empty_returns_empty():
+    """String vazia devolve vazio + count 0."""
+    cleaned, n = strip_emoji("")
+    assert cleaned == ""
+    assert n == 0
+
+
+def test_strip_emoji_no_emoji_returns_unchanged():
+    """Texto sem emoji passa intacto, count 0."""
+    text = "Narrativa forense sem decoração."
+    cleaned, n = strip_emoji(text)
+    assert cleaned == text
+    assert n == 0
+
+
+def test_strip_emoji_handles_zwj_sequences():
+    """Sequencias compostas com ZWJ (👨‍👩‍👧) sao removidas inteiras."""
+    text = "Familia 👨‍👩‍👧 reunida"
+    cleaned, _ = strip_emoji(text)
+    assert "👨" not in cleaned
+    assert "👩" not in cleaned
+    assert "👧" not in cleaned
+    assert "‍" not in cleaned  # ZWJ tambem some
+    assert "Familia" in cleaned and "reunida" in cleaned
+
+
+def test_strip_emoji_handles_misc_symbols():
+    """Misc symbols ranges (☀, ★, ⚠) tambem sao tratados."""
+    text = "Atenção ⚠ pendencia ★ sol ☀"
+    cleaned, n = strip_emoji(text)
+    assert "⚠" not in cleaned
+    assert "★" not in cleaned
+    assert "☀" not in cleaned
+    assert n >= 3
+    assert "Atenção" in cleaned
