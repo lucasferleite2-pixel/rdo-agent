@@ -152,6 +152,7 @@ def init_db(vault_path: Path) -> sqlite3.Connection:
     _migrate_sessao6_message_content_hash(conn)
     _migrate_sessao7_drop_events_table(conn)
     _migrate_sessao10_relax_narratives_scope_check(conn)
+    _migrate_sessao10_narrative_cache_columns(conn)
     conn.commit()
     return conn
 
@@ -437,6 +438,41 @@ def _migrate_sessao6_message_content_hash(conn: sqlite3.Connection) -> None:
         CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_dedup_content_hash
             ON messages(obra, content_hash)
             WHERE content_hash IS NOT NULL
+        """
+    )
+
+
+def _migrate_sessao10_narrative_cache_columns(
+    conn: sqlite3.Connection,
+) -> None:
+    """
+    Sessão 10 / dívida #52 — adiciona ``prompt_template_hash`` em
+    ``forensic_narratives`` para cache binário (ADR-012).
+
+    Hash binário: cache hit quando ``(corpus_id, scope, scope_ref,
+    prompt_template_hash, dossier_hash)`` bate exato. Mudança trivial
+    de prompt (typo) gera hash diferente e cache miss — fuzzy
+    invalidation fica em dívida #62 ativada por triggers de
+    produção.
+
+    Idempotente: ALTER TABLE só roda se a coluna não existir.
+    """
+    existing = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(forensic_narratives)")
+    }
+    if "prompt_template_hash" not in existing:
+        conn.execute(
+            "ALTER TABLE forensic_narratives "
+            "ADD COLUMN prompt_template_hash TEXT"
+        )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_narratives_cache
+            ON forensic_narratives(
+                obra, scope, scope_ref,
+                prompt_template_hash, dossier_hash
+            )
         """
     )
 
