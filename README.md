@@ -15,7 +15,7 @@ Converte exportações de conversas do WhatsApp (incluindo mídias anexas) em RD
 - **Camada 2 (OpenAI API):** Whisper para transcrição, GPT-4 Vision para análise de imagens
 - **Camada 3 (Anthropic API):** Claude como agente-engenheiro para síntese do RDO
 
-**Documentação completa:** ver `docs/Blueprint_V3.docx` (especificação de referência)
+**Documentação completa:** ver `docs/PROJECT_CONTEXT.md` (briefing institucional canônico) e `docs/Blueprint_V3_Agente_Forense_RDO.docx` (especificação de referência histórica).
 
 ---
 
@@ -35,15 +35,20 @@ Converte exportações de conversas do WhatsApp (incluindo mídias anexas) em RD
 ```bash
 # 1. Dependências de sistema
 sudo apt update
-sudo apt install -y ffmpeg exiftool libmediainfo0v5 python3.11 python3.11-venv python3-pip git
+sudo apt install -y ffmpeg exiftool libmediainfo0v5 \
+                    python3.12 python3.12-venv python3-pip git
 # libmediainfo0v5: necessário para extração de timestamp de vídeo/áudio via pymediainfo
+# python3.12 é o recomendado (testado em desenvolvimento). 3.11 é o mínimo suportado.
 
 # 2. Clonar e entrar no projeto
 git clone git@github.com:lucasferleite2-pixel/rdo-agent.git
 cd rdo-agent
 
 # 3. Ambiente virtual
-python3.11 -m venv .venv
+# Recomendado (testado em desenvolvimento):
+python3.12 -m venv .venv
+# Alternativa mínima suportada:
+# python3.11 -m venv .venv
 source .venv/bin/activate
 
 # 4. Dependências Python
@@ -133,11 +138,22 @@ Cada módulo tem responsabilidade única e comunica-se apenas via SQLite (padrã
 
 ## Roadmap
 
-- **Sprint 1** (atual) — Camada 1 completa
-- Sprint 2 — Integração OpenAI (Whisper + Vision)
-- Sprint 3 — Base de conhecimento (Obsidian + SQLite) + classificador
-- Sprint 4 — Agente-Engenheiro (Claude API) + geração RDO
-- Sprint 5 — Piloto em obra real
+### Estado atual: `v1.0.1-markdown-fix`
+
+Para roadmap completo e estado das sprints, ver:
+
+- `docs/PROJECT_CONTEXT.md` — briefing institucional canônico
+- `docs/sessions/` — logs cronológicos por sprint/sessão
+- `docs/audits/` — auditorias periódicas (baseline 25/04/2026)
+- `docs/ADR-001..006.md` — decisões arquiteturais travadas
+
+### Próximos marcos
+
+- **v1.1-web-ui** — Sessão 4: FastAPI + UI Web operacional
+- **v2.0-alpha** — Sessão 5: refactoring obra↔canal + consolidador
+- **v2.1+** — Sessões 6-7: ledger consolidado, ingestão batch multi-canal
+
+A numeração de Sessões pós-v1.0 está travada em `docs/ADR-005-numeracao-sessoes-pos-v1.md`.
 
 ---
 
